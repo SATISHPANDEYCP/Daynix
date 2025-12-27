@@ -47,7 +47,8 @@ export const hasTimePassed = (time) => {
 
 // Categorize a single task
 export const categorizeTask = (task) => {
-  const today = new Date().toDateString();
+  const now = new Date();
+  const today = now.toDateString();
   const taskDate = task.date ? new Date(task.date).toDateString() : today;
   
   // If task is completed
@@ -55,12 +56,33 @@ export const categorizeTask = (task) => {
     return TASK_STATUS.COMPLETED;
   }
   
+  // For TIME_RANGE tasks with endDate, use full datetime comparison
+  if (task.type === TASK_TYPES.TIME_RANGE && task.endDate && task.startTime && task.endTime) {
+    const startDateTime = new Date(task.date + 'T' + task.startTime);
+    const endDateTime = new Date(task.endDate + 'T' + task.endTime);
+    
+    // If task hasn't started yet
+    if (now < startDateTime) {
+      return TASK_STATUS.UPCOMING;
+    }
+    
+    // If task is currently running
+    if (now >= startDateTime && now <= endDateTime) {
+      return TASK_STATUS.RUNNING;
+    }
+    
+    // If task has ended
+    if (now > endDateTime) {
+      return TASK_STATUS.OLD;
+    }
+  }
+  
   // If task is for a future date
   if (new Date(taskDate) > new Date(today)) {
     return TASK_STATUS.UPCOMING;
   }
   
-  // If task is from a past date
+  // If task is from a past date (and not a multi-day TIME_RANGE)
   if (new Date(taskDate) < new Date(today)) {
     return TASK_STATUS.OLD;
   }
@@ -134,12 +156,22 @@ export const categorizeTasks = (tasks) => {
       if (dateCompare !== 0) return dateCompare;
     }
     
-    if (a.type === TASK_TYPES.TIME_BOUND && b.type === TASK_TYPES.TIME_BOUND) {
-      return timeToMinutes(a.time) - timeToMinutes(b.time);
-    }
+    // Sort by time - handle all task types
+    const getStartTime = (task) => {
+      if (task.type === TASK_TYPES.TIME_BOUND && task.time) {
+        return timeToMinutes(task.time);
+      }
+      if (task.type === TASK_TYPES.TIME_RANGE && task.startTime) {
+        return timeToMinutes(task.startTime);
+      }
+      return 9999; // Floating tasks go last
+    };
     
-    if (a.type === TASK_TYPES.TIME_RANGE && b.type === TASK_TYPES.TIME_RANGE) {
-      return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
+    const aTime = getStartTime(a);
+    const bTime = getStartTime(b);
+    
+    if (aTime !== bTime) {
+      return aTime - bTime;
     }
     
     return 0;
@@ -159,11 +191,25 @@ export const autoMoveTask = (task) => {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   
-  return {
+  const movedTask = {
     ...task,
     date: tomorrow.toISOString().split('T')[0],
     movedCount: (task.movedCount || 0) + 1
   };
+  
+  // If task has endDate (date range task), shift it by the same number of days
+  if (task.endDate && task.date) {
+    const startDate = new Date(task.date);
+    const endDate = new Date(task.endDate);
+    const daysDifference = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
+    
+    const newEndDate = new Date(tomorrow);
+    newEndDate.setDate(newEndDate.getDate() + daysDifference);
+    
+    movedTask.endDate = newEndDate.toISOString().split('T')[0];
+  }
+  
+  return movedTask;
 };
 
 // Handle daily recurring tasks

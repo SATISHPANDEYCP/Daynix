@@ -8,10 +8,38 @@ import './App.css';
 
 // TaskCard Component
 const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock }) => {
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [undoTimer, setUndoTimer] = useState(null);
+
   const handleComplete = () => {
-    onComplete(task.id);
-    toast.success('Task completed! 🎉');
+    setIsCompleting(true);
+    toast.info('Task will be marked complete in 5 seconds. Click Undo to cancel.');
+    
+    const timer = setTimeout(() => {
+      onComplete(task.id);
+      setIsCompleting(false);
+      toast.success('Task completed! 🎉');
+    }, 5000);
+    
+    setUndoTimer(timer);
   };
+
+  const handleUndo = () => {
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      setUndoTimer(null);
+    }
+    setIsCompleting(false);
+    toast.info('Completion cancelled');
+  };
+
+  useEffect(() => {
+    return () => {
+      if (undoTimer) {
+        clearTimeout(undoTimer);
+      }
+    };
+  }, [undoTimer]);
 
   const handleDelete = () => {
     if (window.confirm('Delete this task?')) {
@@ -48,11 +76,6 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock }) => {
           {task.isDaily && (
             <span className="task-badge daily-badge">
               <i className="fas fa-redo"></i> Daily
-            </span>
-          )}
-          {task.locked && (
-            <span className="task-badge locked-badge">
-              <i className="fas fa-lock"></i>
             </span>
           )}
           {task.movedCount > 0 && (
@@ -99,39 +122,106 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock }) => {
           {task.date && (
             <span className="task-date">
               <i className="fas fa-calendar"></i>
-              {new Date(task.date).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric'
-              })}
+              {task.endDate && task.endDate !== task.date ? (
+                <>
+                  {new Date(task.date).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                  })}
+                  {' - '}
+                  {new Date(task.endDate).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                  })}
+                </>
+              ) : (
+                new Date(task.date).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric'
+                })
+              )}
             </span>
           )}
         </div>
 
-        <button
-          className="complete-btn"
-          onClick={handleComplete}
-        >
-          <i className="fas fa-check"></i>
-          Complete
-        </button>
+        {!task.completed && (
+          <>
+            {!isCompleting ? (
+              <button
+                className="complete-btn"
+                onClick={handleComplete}
+              >
+                <i className="fas fa-check"></i>
+                Complete
+              </button>
+            ) : (
+              <button
+                className="undo-btn"
+                onClick={handleUndo}
+              >
+                <i className="fas fa-undo"></i>
+                Undo
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
 };
 
 // TaskForm Component
-const TaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
+const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => {
   const [task, setTask] = useState(initialTask || {
     title: '',
     description: '',
     type: TASK_TYPES.FLOATING,
     date: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
     time: '',
     startTime: '',
     endTime: '',
     locked: false,
     isDaily: false
   });
+
+  const checkTimeConflicts = (newTask) => {
+    if (newTask.type === TASK_TYPES.FLOATING) return [];
+
+    const conflicts = [];
+    const newStart = newTask.type === TASK_TYPES.TIME_BOUND 
+      ? new Date(newTask.date + 'T' + newTask.time)
+      : new Date(newTask.date + 'T' + newTask.startTime);
+    const newEnd = newTask.type === TASK_TYPES.TIME_BOUND
+      ? new Date(newStart.getTime() + 60 * 60 * 1000) // Assume 1 hour duration
+      : new Date((newTask.endDate || newTask.date) + 'T' + newTask.endTime);
+
+    allTasks.forEach(existingTask => {
+      // Skip if it's the same task (editing)
+      if (initialTask && existingTask.id === initialTask.id) return;
+      // Skip completed tasks
+      if (existingTask.completed) return;
+      // Skip floating tasks
+      if (existingTask.type === TASK_TYPES.FLOATING) return;
+
+      let existingStart, existingEnd;
+
+      if (existingTask.type === TASK_TYPES.TIME_BOUND) {
+        existingStart = new Date(existingTask.date + 'T' + existingTask.time);
+        existingEnd = new Date(existingStart.getTime() + 60 * 60 * 1000);
+      } else if (existingTask.type === TASK_TYPES.TIME_RANGE) {
+        existingStart = new Date(existingTask.date + 'T' + existingTask.startTime);
+        existingEnd = new Date((existingTask.endDate || existingTask.date) + 'T' + existingTask.endTime);
+      }
+
+      // Check if times overlap
+      if (newStart < existingEnd && newEnd > existingStart) {
+        conflicts.push(existingTask);
+      }
+    });
+
+    return conflicts;
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -149,6 +239,28 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
     if (task.type === TASK_TYPES.TIME_RANGE && (!task.startTime || !task.endTime)) {
       toast.info('Please set start and end times');
       return;
+    }
+
+    if (task.type === TASK_TYPES.TIME_RANGE) {
+      const startDate = new Date(task.date + 'T' + task.startTime);
+      const endDate = new Date((task.endDate || task.date) + 'T' + task.endTime);
+      
+      if (endDate <= startDate) {
+        toast.error('End time must be after start time. For overnight tasks, set end date to next day.');
+        return;
+      }
+    }
+
+    // Check for time conflicts
+    const conflicts = checkTimeConflicts(task);
+    if (conflicts.length > 0) {
+      const conflictNames = conflicts.map(t => t.title).join(', ');
+      const confirmed = window.confirm(
+        `⚠️ Time Conflict Detected!\n\nThis task overlaps with: ${conflictNames}\n\nDo you want to add it anyway?`
+      );
+      if (!confirmed) {
+        return;
+      }
     }
 
     onSubmit(task);
@@ -216,24 +328,45 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
       )}
 
       {task.type === TASK_TYPES.TIME_RANGE && (
-        <div className="form-row">
-          <div className="form-group">
-            <label>Start Time</label>
-            <input
-              type="time"
-              value={task.startTime}
-              onChange={e => handleChange('startTime', e.target.value)}
-            />
+        <>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Start Date</label>
+              <input
+                type="date"
+                value={task.date}
+                onChange={e => handleChange('date', e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label>End Date</label>
+              <input
+                type="date"
+                value={task.endDate || task.date}
+                onChange={e => handleChange('endDate', e.target.value)}
+                min={task.date}
+              />
+            </div>
           </div>
-          <div className="form-group">
-            <label>End Time</label>
-            <input
-              type="time"
-              value={task.endTime}
-              onChange={e => handleChange('endTime', e.target.value)}
-            />
+          <div className="form-row">
+            <div className="form-group">
+              <label>Start Time</label>
+              <input
+                type="time"
+                value={task.startTime}
+                onChange={e => handleChange('startTime', e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label>End Time</label>
+              <input
+                type="time"
+                value={task.endTime}
+                onChange={e => handleChange('endTime', e.target.value)}
+              />
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       <div className="form-options">
@@ -700,12 +833,22 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferences, setPreferences] = useState(null);
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(() => {
+    // Initialize with dark theme by default
+    document.body.classList.add('dark-mode');
+    return 'dark';
+  });
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [currentView, setCurrentView] = useState('main'); // 'main' or 'tasks'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  );
 
   useEffect(() => {
     loadData();
+    requestNotificationPermission();
 
     // Check if app is already installed
     if (window.matchMedia('(display-mode: standalone)').matches ||
@@ -752,6 +895,7 @@ function App() {
       const categorized = categorizeTasks(tasks);
       setCategorizedTasks(categorized);
       handleDailyTasks();
+      scheduleNotifications(tasks);
     }
   }, [tasks]);
 
@@ -764,7 +908,7 @@ function App() {
     const prefs = await getPreferences();
     setTasks(loadedTasks);
     setPreferences(prefs);
-    setTheme(prefs.theme || 'light');
+    setTheme(prefs.theme || 'dark');
   };
 
   const handleDailyTasks = async () => {
@@ -791,6 +935,66 @@ function App() {
     if (hasNewInstances) {
       await loadData();
     }
+  };
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === 'granted') {
+        toast.success('Notifications enabled!');
+      }
+    }
+  };
+
+  const scheduleNotifications = (tasksList) => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') {
+      return;
+    }
+
+    tasksList.forEach(task => {
+      if (task.completed) return;
+
+      const now = new Date();
+      let taskDateTime = null;
+
+      // Get task start time
+      if (task.type === TASK_TYPES.TIME_BOUND && task.time) {
+        taskDateTime = new Date(task.date + 'T' + task.time);
+      } else if (task.type === TASK_TYPES.TIME_RANGE && task.startTime) {
+        taskDateTime = new Date(task.date + 'T' + task.startTime);
+      }
+
+      if (!taskDateTime || taskDateTime <= now) return;
+
+      // Schedule notification 10 minutes before
+      const reminderTime = new Date(taskDateTime.getTime() - 10 * 60 * 1000);
+      const timeUntilReminder = reminderTime.getTime() - now.getTime();
+
+      if (timeUntilReminder > 0 && timeUntilReminder < 24 * 60 * 60 * 1000) {
+        setTimeout(() => {
+          new Notification('Task Reminder 🔔', {
+            body: `"${task.title}" starts in 10 minutes`,
+            icon: '/pwa-192.png',
+            tag: `task-${task.id}`,
+            requireInteraction: false
+          });
+        }, timeUntilReminder);
+      }
+
+      // Schedule notification at task start
+      const timeUntilStart = taskDateTime.getTime() - now.getTime();
+      if (timeUntilStart > 0 && timeUntilStart < 24 * 60 * 60 * 1000) {
+        setTimeout(() => {
+          new Notification('Task Starting Now! 🚀', {
+            body: `"${task.title}" is starting now`,
+            icon: '/pwa-192.png',
+            tag: `task-start-${task.id}`,
+            requireInteraction: false
+          });
+        }, timeUntilStart);
+      }
+    });
   };
 
   const handleAddTask = async (taskData) => {
@@ -834,6 +1038,7 @@ function App() {
   const handleEditTask = (task) => {
     setEditingTask(task);
     setShowTaskForm(true);
+    setCurrentView('tasks'); // Switch to All Tasks view
   };
 
   const handleToggleLock = async (taskId) => {
@@ -871,7 +1076,6 @@ function App() {
     if (preferences) {
       const updatedPrefs = { ...preferences, theme: newTheme };
       setPreferences(updatedPrefs);
-      const { savePreferences } = await import('./utils/storage');
       await savePreferences(updatedPrefs);
     }
   };
@@ -887,6 +1091,16 @@ function App() {
     }
 
     setDeferredPrompt(null);
+  };
+
+  const filterTasks = (taskList) => {
+    if (!searchQuery.trim()) return taskList;
+    
+    const query = searchQuery.toLowerCase();
+    return taskList.filter(task => 
+      task.title.toLowerCase().includes(query) ||
+      (task.description && task.description.toLowerCase().includes(query))
+    );
   };
 
   return (
@@ -925,139 +1139,247 @@ function App() {
 
       <main className="app-main">
         <div className="container">
-          <div className="add-task-section">
-            {!showTaskForm ? (
-              <button
-                className="add-task-btn"
-                onClick={() => {
-                  setEditingTask(null);
-                  setShowTaskForm(true);
-                }}
-              >
-                <i className="fas fa-plus"></i>
-                Add a task
-              </button>
-            ) : (
-              <TaskForm
-                initialTask={editingTask}
-                onSubmit={editingTask ? handleUpdateTask : handleAddTask}
-                onCancel={() => {
-                  setShowTaskForm(false);
-                  setEditingTask(null);
-                }}
-              />
-            )}
+          {/* Navigation Tabs */}
+          <div className="view-navigation">
+            <button
+              className={`nav-tab ${currentView === 'main' ? 'active' : ''}`}
+              onClick={() => setCurrentView('main')}
+            >
+              <i className="fas fa-home"></i>
+              Now
+            </button>
+            <button
+              className={`nav-tab ${currentView === 'tasks' ? 'active' : ''}`}
+              onClick={() => setCurrentView('tasks')}
+            >
+              <i className="fas fa-list"></i>
+              All Tasks
+            </button>
           </div>
 
-          {categorizedTasks.running.length > 0 && (
-            <section className="task-section running-section">
-              <div className="section-header">
-                <h2>
-                  <i className="fas fa-play-circle"></i>
-                  Running Now
-                </h2>
-                <span className="task-count">{categorizedTasks.running.length}</span>
-              </div>
-              <div className="task-list">
-                {categorizedTasks.running.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={handleCompleteTask}
-                    onDelete={handleDeleteTask}
-                    onEdit={handleEditTask}
-                    onToggleLock={handleToggleLock}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {categorizedTasks.upcoming.length > 0 && (
-            <section className="task-section">
-              <div className="section-header">
-                <h2>
-                  <i className="fas fa-clock"></i>
-                  Upcoming
-                </h2>
-                <span className="task-count">{categorizedTasks.upcoming.length}</span>
-              </div>
-              <div className="task-list">
-                {categorizedTasks.upcoming.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={handleCompleteTask}
-                    onDelete={handleDeleteTask}
-                    onEdit={handleEditTask}
-                    onToggleLock={handleToggleLock}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {categorizedTasks.old.length > 0 && (
-            <section className="task-section old-section">
-              <div className="section-header">
-                <h2>
-                  <i className="fas fa-history"></i>
-                  Past Tasks
-                </h2>
-                <span className="task-count">{categorizedTasks.old.length}</span>
-                <button
-                  className="move-tasks-btn"
-                  onClick={handleAutoMoveOldTasks}
-                >
-                  <i className="fas fa-arrow-right"></i>
-                  Move to Tomorrow
-                </button>
-              </div>
-              <div className="task-list">
-                {categorizedTasks.old.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={handleCompleteTask}
-                    onDelete={handleDeleteTask}
-                    onEdit={handleEditTask}
-                    onToggleLock={handleToggleLock}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {categorizedTasks.completed.length > 0 && (
-            <section className="task-section completed-section">
-              <div className="section-header">
-                <h2>
+          {/* MAIN VIEW - Only Running or Next Upcoming */}
+          {currentView === 'main' && (
+            <>
+              {categorizedTasks.running.length > 0 ? (
+                <section className="task-section running-section">
+                  <div className="section-header">
+                    <h2>
+                      <i className="fas fa-play-circle"></i>
+                      Running Now
+                    </h2>
+                    <span className="task-count">{categorizedTasks.running.length}</span>
+                  </div>
+                  <div className="task-list">
+                    {categorizedTasks.running.map(task => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onComplete={handleCompleteTask}
+                        onDelete={handleDeleteTask}
+                        onEdit={handleEditTask}
+                        onToggleLock={handleToggleLock}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ) : categorizedTasks.upcoming.length > 0 ? (
+                <section className="task-section">
+                  <div className="section-header">
+                    <h2>
+                      <i className="fas fa-clock"></i>
+                      Next Up
+                    </h2>
+                  </div>
+                  <div className="task-list">
+                    <TaskCard
+                      key={categorizedTasks.upcoming[0].id}
+                      task={categorizedTasks.upcoming[0]}
+                      onComplete={handleCompleteTask}
+                      onDelete={handleDeleteTask}
+                      onEdit={handleEditTask}
+                      onToggleLock={handleToggleLock}
+                    />
+                  </div>
+                </section>
+              ) : (
+                <div className="empty-state">
                   <i className="fas fa-check-circle"></i>
-                  Completed
-                </h2>
-                <span className="task-count">{categorizedTasks.completed.length}</span>
-              </div>
-              <div className="task-list">
-                {categorizedTasks.completed.slice(0, 5).map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={handleCompleteTask}
-                    onDelete={handleDeleteTask}
-                    onEdit={handleEditTask}
-                    onToggleLock={handleToggleLock}
-                  />
-                ))}
-              </div>
-            </section>
+                  <h3>All caught up!</h3>
+                  <p>No tasks running or upcoming right now</p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setCurrentView('tasks')}
+                    style={{ marginTop: '20px' }}
+                  >
+                    <i className="fas fa-plus"></i> Add a task
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
-          {tasks.length === 0 && (
-            <div className="empty-state">
-              <i className="fas fa-leaf"></i>
-              <h3>Your day is yours</h3>
-              <p>Add your first task to get started</p>
-            </div>
+          {/* TASKS VIEW - Add Task + All Tasks */}
+          {currentView === 'tasks' && (
+            <>
+              {/* Search Bar */}
+              <div className="search-section">
+                <div className="search-bar">
+                  <i className="fas fa-search"></i>
+                  <input
+                    type="text"
+                    placeholder="Search tasks..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="search-input"
+                  />
+                  {searchQuery && (
+                    <button
+                      className="clear-search-btn"
+                      onClick={() => setSearchQuery('')}
+                      title="Clear search"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="add-task-section">
+                {!showTaskForm ? (
+                  <button
+                    className="add-task-btn"
+                    onClick={() => {
+                      setEditingTask(null);
+                      setShowTaskForm(true);
+                    }}
+                  >
+                    <i className="fas fa-plus"></i>
+                    Add a task
+                  </button>
+                ) : (
+                  <TaskForm
+                    initialTask={editingTask}
+                    allTasks={tasks}
+                    onSubmit={editingTask ? handleUpdateTask : handleAddTask}
+                    onCancel={() => {
+                      setShowTaskForm(false);
+                      setEditingTask(null);
+                    }}
+                  />
+                )}
+              </div>
+
+              {filterTasks(categorizedTasks.running).length > 0 && (
+                <section className="task-section running-section">
+                  <div className="section-header">
+                    <h2>
+                      <i className="fas fa-play-circle"></i>
+                      Running Now
+                    </h2>
+                    <span className="task-count">{filterTasks(categorizedTasks.running).length}</span>
+                  </div>
+                  <div className="task-list">
+                    {filterTasks(categorizedTasks.running).map(task => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onComplete={handleCompleteTask}
+                        onDelete={handleDeleteTask}
+                        onEdit={handleEditTask}
+                        onToggleLock={handleToggleLock}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {filterTasks(categorizedTasks.upcoming).length > 0 && (
+                <section className="task-section">
+                  <div className="section-header">
+                    <h2>
+                      <i className="fas fa-clock"></i>
+                      Upcoming
+                    </h2>
+                    <span className="task-count">{filterTasks(categorizedTasks.upcoming).length}</span>
+                  </div>
+                  <div className="task-list">
+                    {filterTasks(categorizedTasks.upcoming).map(task => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onComplete={handleCompleteTask}
+                        onDelete={handleDeleteTask}
+                        onEdit={handleEditTask}
+                        onToggleLock={handleToggleLock}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {filterTasks(categorizedTasks.old).length > 0 && (
+                <section className="task-section old-section">
+                  <div className="section-header">
+                    <h2>
+                      <i className="fas fa-history"></i>
+                      Past Tasks
+                    </h2>
+                    <span className="task-count">{filterTasks(categorizedTasks.old).length}</span>
+                    <button
+                      className="move-tasks-btn"
+                      onClick={handleAutoMoveOldTasks}
+                    >
+                      <i className="fas fa-arrow-right"></i>
+                      Move to Tomorrow
+                    </button>
+                  </div>
+                  <div className="task-list">
+                    {filterTasks(categorizedTasks.old).map(task => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onComplete={handleCompleteTask}
+                        onDelete={handleDeleteTask}
+                        onEdit={handleEditTask}
+                        onToggleLock={handleToggleLock}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {filterTasks(categorizedTasks.completed).length > 0 && (
+                <section className="task-section completed-section">
+                  <div className="section-header">
+                    <h2>
+                      <i className="fas fa-check-circle"></i>
+                      Completed
+                    </h2>
+                    <span className="task-count">{filterTasks(categorizedTasks.completed).length}</span>
+                  </div>
+                  <div className="task-list">
+                    {filterTasks(categorizedTasks.completed).slice(0, 5).map(task => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onComplete={handleCompleteTask}
+                        onDelete={handleDeleteTask}
+                        onEdit={handleEditTask}
+                        onToggleLock={handleToggleLock}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {tasks.length === 0 && (
+                <div className="empty-state">
+                  <i className="fas fa-leaf"></i>
+                  <h3>Your day is yours</h3>
+                  <p>Add your first task to get started</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

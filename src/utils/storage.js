@@ -26,7 +26,7 @@ export const DEFAULT_PREFERENCES = {
   studySlots: [], // Array of {start, end}
   breakDuration: 15, // minutes
   breakFrequency: 120, // minutes (every 2 hours)
-  theme: 'light'
+  theme: 'dark'
 };
 
 // Task Management
