@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
+import PreferenceCard from './components/PreferenceCard';
 import { getTasks, addTask, updateTask, deleteTask, getPreferences, savePreferences, exportData, importData, getSettings, saveSettings, clearAllData } from './utils/storage';
 import { categorizeTasks, autoMoveTask, shouldCreateDailyInstance, createDailyInstance, TASK_TYPES, formatTime, getTimeUntil } from './utils/taskHelpers';
 import './App.css';
@@ -12,7 +13,7 @@ const Stopwatch = ({ task }) => {
 
   useEffect(() => {
     let startTime;
-    
+
     // Calculate start time based on task type
     if (task.type === TASK_TYPES.TIME_BOUND && task.time && task.date) {
       startTime = new Date(task.date + 'T' + task.time);
@@ -63,7 +64,7 @@ const ActivityCard = ({ title, startTime, endTime, icon, type }) => {
     if (type === 'office') {
       return "When you have free time, consider reading something to expand your knowledge.";
     }
-    
+
     if (type === 'study') {
       const studyQuotes = [
         "Success is the sum of small efforts repeated day in and day out.",
@@ -97,15 +98,15 @@ const ActivityCard = ({ title, startTime, endTime, icon, type }) => {
         "Your mind is a powerful thing. When you fill it with positive thoughts, your life will start to change.",
         "The difference between ordinary and extraordinary is that little extra."
       ];
-      
+
       // Use start time to generate unique index for different study sessions
       const [hours, minutes] = startTime.split(':').map(Number);
       const timeIndex = hours * 60 + minutes;
       const quoteIndex = timeIndex % studyQuotes.length;
-      
+
       return studyQuotes[quoteIndex];
     }
-    
+
     return null;
   };
 
@@ -147,13 +148,13 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
   const handleComplete = () => {
     setIsCompleting(true);
     toast.info('Task will be marked complete in 5 seconds. Click Undo to cancel.');
-    
+
     const timer = setTimeout(() => {
       onComplete(task.id);
       setIsCompleting(false);
       toast.success('Task completed! 🎉');
     }, 5000);
-    
+
     setUndoTimer(timer);
   };
 
@@ -363,7 +364,7 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => 
     if (newTask.type === TASK_TYPES.FLOATING) return [];
 
     const conflicts = [];
-    const newStart = newTask.type === TASK_TYPES.TIME_BOUND 
+    const newStart = newTask.type === TASK_TYPES.TIME_BOUND
       ? new Date(newTask.date + 'T' + newTask.time)
       : new Date(newTask.date + 'T' + newTask.startTime);
     const newEnd = newTask.type === TASK_TYPES.TIME_BOUND
@@ -418,7 +419,7 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => 
     if (task.type === TASK_TYPES.TIME_RANGE) {
       const startDate = new Date(task.date + 'T' + task.startTime);
       const endDate = new Date((task.endDate || task.date) + 'T' + task.endTime);
-      
+
       if (endDate <= startDate) {
         toast.error('End time must be after start time. For overnight tasks, set end date to next day.');
         return;
@@ -598,7 +599,7 @@ const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
   const handleChange = (field, value) => {
     // No validation needed - overnight sessions are allowed
     // (end time before start time means it continues to next day)
-    
+
     setPreferences(prev => {
       const updated = { ...prev, [field]: value };
 
@@ -791,8 +792,8 @@ const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
             )}
 
             {!preferences.officeStartTime && !preferences.officeEndTime && (
-              <button 
-                className="add-slot-btn" 
+              <button
+                className="add-slot-btn"
                 onClick={() => {
                   handleChange('officeStartTime', '09:00');
                   handleChange('officeEndTime', '17:00');
@@ -814,63 +815,63 @@ const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
                   const startMins = startH * 60 + startM;
                   const endMins = endH * 60 + endM;
                   const isOvernight = endMins < startMins;
-                  
+
                   return (
-                  <div key={index} className="study-slot-container">
-                    <div className="form-row slot-row">
-                      <div className="form-group">
-                        <label>From</label>
-                        <input
-                          type="time"
-                          value={slot.start}
-                          onChange={e => handleStudySlotChange(index, 'start', e.target.value)}
-                        />
-                      </div>
+                    <div key={index} className="study-slot-container">
+                      <div className="form-row slot-row">
+                        <div className="form-group">
+                          <label>From</label>
+                          <input
+                            type="time"
+                            value={slot.start}
+                            onChange={e => handleStudySlotChange(index, 'start', e.target.value)}
+                          />
+                        </div>
 
-                      <div className="form-group">
-                        <label>To</label>
-                        <input
-                          type="time"
-                          value={slot.end}
-                          onChange={e => handleStudySlotChange(index, 'end', e.target.value)}
-                        />
-                        {isOvernight && (
-                          <span className="overnight-badge">
-                            <i className="fas fa-moon"></i> Next day
-                          </span>
-                        )}
-                      </div>
+                        <div className="form-group">
+                          <label>To</label>
+                          <input
+                            type="time"
+                            value={slot.end}
+                            onChange={e => handleStudySlotChange(index, 'end', e.target.value)}
+                          />
+                          {isOvernight && (
+                            <span className="overnight-badge">
+                              <i className="fas fa-moon"></i> Next day
+                            </span>
+                          )}
+                        </div>
 
-                      <button
-                        className="icon-btn remove-btn"
-                        onClick={() => removeStudySlot(index)}
-                        title="Remove slot"
-                      >
-                        <i className="fas fa-trash"></i>
-                      </button>
-                    </div>
-                    <div className="form-group">
-                      <label>Study Days</label>
-                      <div className="days-selector">
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, dayIndex) => (
-                          <button
-                            key={dayIndex}
-                            type="button"
-                            className={`day-btn ${(slot.days || []).includes(dayIndex) ? 'active' : ''}`}
-                            onClick={() => {
-                              const days = slot.days || [];
-                              const newDays = days.includes(dayIndex)
-                                ? days.filter(d => d !== dayIndex)
-                                : [...days, dayIndex].sort();
-                              handleStudySlotChange(index, 'days', newDays);
-                            }}
-                          >
-                            {day}
-                          </button>
-                        ))}
+                        <button
+                          className="icon-btn remove-btn"
+                          onClick={() => removeStudySlot(index)}
+                          title="Remove slot"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      </div>
+                      <div className="form-group">
+                        <label>Study Days</label>
+                        <div className="days-selector">
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, dayIndex) => (
+                            <button
+                              key={dayIndex}
+                              type="button"
+                              className={`day-btn ${(slot.days || []).includes(dayIndex) ? 'active' : ''}`}
+                              onClick={() => {
+                                const days = slot.days || [];
+                                const newDays = days.includes(dayIndex)
+                                  ? days.filter(d => d !== dayIndex)
+                                  : [...days, dayIndex].sort();
+                                handleStudySlotChange(index, 'days', newDays);
+                              }}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
                   );
                 })}
               </>
@@ -955,8 +956,8 @@ const SettingsModal = ({ isOpen, onClose }) => {
       // Request directory picker (only works in modern browsers)
       if ('showDirectoryPicker' in window) {
         const dirHandle = await window.showDirectoryPicker();
-        const newSettings = { 
-          ...settings, 
+        const newSettings = {
+          ...settings,
           backupLocation: dirHandle.name
           // Note: backupHandle is stored in state only, not in IndexedDB (can't be serialized)
         };
@@ -997,14 +998,14 @@ const SettingsModal = ({ isOpen, onClose }) => {
     try {
       if ('showDirectoryPicker' in window) {
         let dirHandle = settings.backupHandle;
-        
+
         // If handle is lost, request permission again
         if (!dirHandle && settings.backupLocation) {
           toast.info('Please select the backup folder again');
           dirHandle = await window.showDirectoryPicker();
           setSettings({ ...settings, backupHandle: dirHandle });
         }
-        
+
         if (dirHandle) {
           // Save to the stored location
           const data = await exportData(true); // Get data without downloading
@@ -1015,7 +1016,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
           const stream = await fileHandle.createWritable();
           await stream.write(data);
           await stream.close();
-          
+
           const newSettings = { ...settings, lastBackup: new Date().toISOString() };
           await saveSettings(newSettings);
           setSettings({ ...newSettings, backupHandle: dirHandle });
@@ -1277,7 +1278,7 @@ function App() {
 
   const getActiveActivities = () => {
     if (!preferences) return [];
-    
+
     const now = new Date();
     const currentDay = now.getDay(); // 0=Sunday, 1=Monday, etc.
     const currentTime = now.getHours() * 60 + now.getMinutes();
@@ -1287,15 +1288,15 @@ function App() {
     if (preferences.officeStartTime && preferences.officeEndTime) {
       const officeDays = preferences.officeDays || [];
       const yesterdayDay = (currentDay - 1 + 7) % 7;
-      
+
       const [startH, startM] = preferences.officeStartTime.split(':').map(Number);
       const [endH, endM] = preferences.officeEndTime.split(':').map(Number);
       const startMins = startH * 60 + startM;
       const endMins = endH * 60 + endM;
       const isOvernightSession = endMins < startMins;
-      
+
       let isActive = false;
-      
+
       if (isOvernightSession) {
         // Overnight session: check if started yesterday or today
         if (officeDays.includes(currentDay) && currentTime >= startMins) {
@@ -1309,7 +1310,7 @@ function App() {
           isActive = true;
         }
       }
-      
+
       if (isActive) {
         activities.push({
           id: 'office-session',
@@ -1325,7 +1326,7 @@ function App() {
     // Check study slots
     if (preferences.studySlots && preferences.studySlots.length > 0) {
       const yesterdayDay = (currentDay - 1 + 7) % 7;
-      
+
       preferences.studySlots.forEach((slot, index) => {
         const slotDays = slot.days || [];
         const [startH, startM] = slot.start.split(':').map(Number);
@@ -1333,9 +1334,9 @@ function App() {
         const startMins = startH * 60 + startM;
         const endMins = endH * 60 + endM;
         const isOvernightSession = endMins < startMins;
-        
+
         let isActive = false;
-        
+
         if (isOvernightSession) {
           // Overnight session: check if started yesterday or today
           if (slotDays.includes(currentDay) && currentTime >= startMins) {
@@ -1349,7 +1350,7 @@ function App() {
             isActive = true;
           }
         }
-        
+
         if (isActive) {
           activities.push({
             id: `study-session-${index}`,
@@ -1490,9 +1491,9 @@ function App() {
 
   const filterTasks = (taskList) => {
     if (!searchQuery.trim()) return taskList;
-    
+
     const query = searchQuery.toLowerCase();
-    return taskList.filter(task => 
+    return taskList.filter(task =>
       task.title.toLowerCase().includes(query) ||
       (task.description && task.description.toLowerCase().includes(query))
     );
@@ -1800,6 +1801,44 @@ function App() {
                   <p>Add your first task to get started</p>
                 </div>
               )}
+
+              {/* Preference section */}
+              {preferences && (
+                <section className="task-section">
+                  <div className="section-header">
+                    <h2>
+                      <i className="fas fa-calendar-alt"></i>
+                      Your Saved Preferences
+                    </h2>
+                  </div>
+
+                  <div className="task-list">
+                    {/* Office Hours */}
+                    {preferences.officeStartTime && preferences.officeEndTime && (
+                      <PreferenceCard
+                        title="Office Hours"
+                        startTime={preferences.officeStartTime}
+                        endTime={preferences.officeEndTime}
+                        days={preferences.officeDays}
+                        icon="briefcase"
+                      />
+                    )}
+
+                    {/* Study Slots */}
+                    {preferences.studySlots?.map((slot, index) => (
+                      <PreferenceCard
+                        key={index}
+                        title={`Study Slot ${index + 1}`}
+                        startTime={slot.start}
+                        endTime={slot.end}
+                        days={slot.days}
+                        icon="book"
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
             </>
           )}
         </div>

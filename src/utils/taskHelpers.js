@@ -31,7 +31,7 @@ export const isWithinTimeRange = (startTime, endTime) => {
   const current = getCurrentMinutes();
   const start = timeToMinutes(startTime);
   const end = timeToMinutes(endTime);
-  
+
   if (start === null || end === null) return false;
   return current >= start && current <= end;
 };
@@ -40,7 +40,7 @@ export const isWithinTimeRange = (startTime, endTime) => {
 export const hasTimePassed = (time) => {
   const current = getCurrentMinutes();
   const target = timeToMinutes(time);
-  
+
   if (target === null) return false;
   return current > target;
 };
@@ -50,81 +50,81 @@ export const categorizeTask = (task) => {
   const now = new Date();
   const today = now.toDateString();
   const taskDate = task.date ? new Date(task.date).toDateString() : today;
-  
+
   // If task is completed
   if (task.completed) {
     return TASK_STATUS.COMPLETED;
   }
-  
+
   // For TIME_RANGE tasks with endDate, use full datetime comparison
   if (task.type === TASK_TYPES.TIME_RANGE && task.endDate && task.startTime && task.endTime) {
     const startDateTime = new Date(task.date + 'T' + task.startTime);
     const endDateTime = new Date(task.endDate + 'T' + task.endTime);
-    
+
     // If task hasn't started yet
     if (now < startDateTime) {
       return TASK_STATUS.UPCOMING;
     }
-    
+
     // If task is currently running
     if (now >= startDateTime && now <= endDateTime) {
       return TASK_STATUS.RUNNING;
     }
-    
+
     // If task has ended
     if (now > endDateTime) {
       return TASK_STATUS.OLD;
     }
   }
-  
+
   // If task is for a future date
   if (new Date(taskDate) > new Date(today)) {
     return TASK_STATUS.UPCOMING;
   }
-  
+
   // If task is from a past date (and not a multi-day TIME_RANGE)
   if (new Date(taskDate) < new Date(today)) {
     return TASK_STATUS.OLD;
   }
-  
+
   // Today's tasks - categorize by time
   if (task.type === TASK_TYPES.FLOATING) {
     return TASK_STATUS.UPCOMING; // Floating tasks are always "upcoming" until done
   }
-  
+
   if (task.type === TASK_TYPES.TIME_BOUND) {
     if (!task.time) return TASK_STATUS.UPCOMING;
-    
+
     if (hasTimePassed(task.time)) {
       return TASK_STATUS.OLD;
     }
-    
+
     // Check if within 15 minutes of start time
     const current = getCurrentMinutes();
     const target = timeToMinutes(task.time);
     const diff = target - current;
-    
+
     if (diff >= -15 && diff <= 15) {
       return TASK_STATUS.RUNNING;
     }
-    
+
     return TASK_STATUS.UPCOMING;
   }
-  
+
   if (task.type === TASK_TYPES.TIME_RANGE) {
     if (!task.startTime || !task.endTime) return TASK_STATUS.UPCOMING;
-    
+
     if (isWithinTimeRange(task.startTime, task.endTime)) {
       return TASK_STATUS.RUNNING;
     }
-    
+
     if (hasTimePassed(task.endTime)) {
       return TASK_STATUS.OLD;
     }
-    
+
     return TASK_STATUS.UPCOMING;
   }
-  
+
   return TASK_STATUS.UPCOMING;
 };
 
@@ -136,12 +136,12 @@ export const categorizeTasks = (tasks) => {
     old: [],
     completed: []
   };
-  
+
   tasks.forEach(task => {
     const status = categorizeTask(task);
     categorized[status].push(task);
   });
-  
+
   // Sort each category
   categorized.running.sort((a, b) => {
     if (a.type === TASK_TYPES.TIME_BOUND && b.type === TASK_TYPES.TIME_BOUND) {
@@ -149,13 +149,13 @@ export const categorizeTasks = (tasks) => {
     }
     return 0;
   });
-  
+
   categorized.upcoming.sort((a, b) => {
     if (a.date && b.date) {
       const dateCompare = new Date(a.date) - new Date(b.date);
       if (dateCompare !== 0) return dateCompare;
     }
-    
+
     // Sort by time - handle all task types
     const getStartTime = (task) => {
       if (task.type === TASK_TYPES.TIME_BOUND && task.time) {
@@ -166,59 +166,59 @@ export const categorizeTasks = (tasks) => {
       }
       return 9999; // Floating tasks go last
     };
-    
+
     const aTime = getStartTime(a);
     const bTime = getStartTime(b);
-    
+
     if (aTime !== bTime) {
       return aTime - bTime;
     }
-    
+
     return 0;
   });
-  
+
   categorized.old.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
   categorized.completed.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
-  
+
   return categorized;
 };
 
 // Auto-move old tasks to next available slot (if not locked)
 export const autoMoveTask = (task) => {
   if (task.locked) return task;
-  
+
   // Move to tomorrow
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  
+
   const movedTask = {
     ...task,
     date: tomorrow.toISOString().split('T')[0],
     movedCount: (task.movedCount || 0) + 1
   };
-  
+
   // If task has endDate (date range task), shift it by the same number of days
   if (task.endDate && task.date) {
     const startDate = new Date(task.date);
     const endDate = new Date(task.endDate);
     const daysDifference = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
-    
+
     const newEndDate = new Date(tomorrow);
     newEndDate.setDate(newEndDate.getDate() + daysDifference);
-    
+
     movedTask.endDate = newEndDate.toISOString().split('T')[0];
   }
-  
+
   return movedTask;
 };
 
 // Handle daily recurring tasks
 export const shouldCreateDailyInstance = (task) => {
   if (!task.isDaily) return false;
-  
+
   const today = new Date().toDateString();
   const lastCreated = task.lastDailyInstance ? new Date(task.lastDailyInstance).toDateString() : null;
-  
+
   return lastCreated !== today;
 };
 
@@ -246,24 +246,24 @@ export const formatTime = (timeStr) => {
 // Get time until task
 export const getTimeUntil = (timeStr, dateStr) => {
   if (!timeStr) return null;
-  
+
   const now = new Date();
   const taskDateTime = new Date(dateStr + 'T' + timeStr);
   const diffMs = taskDateTime.getTime() - now.getTime();
-  
+
   // If task is in the past
   if (diffMs < 0) return 'Started';
-  
+
   // If starting within a minute
   if (diffMs < 60000) return 'Now';
-  
+
   const totalMinutes = Math.floor(diffMs / 60000);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  
+
   // If more than 24 hours away, don't show countdown
   if (hours >= 24) return null;
-  
+
   if (hours > 0) {
     return `in ${hours}h ${minutes}m`;
   }
