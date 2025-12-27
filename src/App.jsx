@@ -2,14 +2,691 @@ import { useState, useEffect } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
-import TaskCard from './components/TaskCard';
-import TaskForm from './components/TaskForm';
-import SettingsModal from './components/SettingsModal';
-import PreferencesModal from './components/PreferencesModal';
-import { getTasks, addTask, updateTask, deleteTask, getPreferences } from './utils/storage';
-import { categorizeTasks, autoMoveTask, shouldCreateDailyInstance, createDailyInstance } from './utils/taskHelpers';
+import { getTasks, addTask, updateTask, deleteTask, getPreferences, savePreferences, exportData, importData, getSettings, saveSettings, clearAllData } from './utils/storage';
+import { categorizeTasks, autoMoveTask, shouldCreateDailyInstance, createDailyInstance, TASK_TYPES, formatTime, getTimeUntil } from './utils/taskHelpers';
 import './App.css';
 
+// TaskCard Component
+const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock }) => {
+  const handleComplete = () => {
+    onComplete(task.id);
+    toast.success('Task completed! 🎉');
+  };
+
+  const handleDelete = () => {
+    if (window.confirm('Delete this task?')) {
+      onDelete(task.id);
+      toast.info('Task removed');
+    }
+  };
+
+  const getTaskTimeDisplay = () => {
+    if (task.type === TASK_TYPES.FLOATING) {
+      return 'Anytime';
+    }
+
+    if (task.type === TASK_TYPES.TIME_BOUND) {
+      const timeUntil = getTimeUntil(task.time);
+      return (
+        <span className="time-display">
+          {formatTime(task.time)}
+          {timeUntil && <span className="time-until">{timeUntil}</span>}
+        </span>
+      );
+    }
+
+    if (task.type === TASK_TYPES.TIME_RANGE) {
+      return `${formatTime(task.startTime)} - ${formatTime(task.endTime)}`;
+    }
+  };
+
+  return (
+    <div className={`task-card ${task.locked ? 'locked' : ''}`}>
+      <div className="task-card-header">
+        <div className="task-title-section">
+          <h3 className="task-title">{task.title}</h3>
+          {task.isDaily && (
+            <span className="task-badge daily-badge">
+              <i className="fas fa-redo"></i> Daily
+            </span>
+          )}
+          {task.locked && (
+            <span className="task-badge locked-badge">
+              <i className="fas fa-lock"></i>
+            </span>
+          )}
+          {task.movedCount > 0 && (
+            <span className="task-badge moved-badge">
+              Moved {task.movedCount}x
+            </span>
+          )}
+        </div>
+        <div className="task-actions">
+          <button
+            className="task-action-btn"
+            onClick={() => onToggleLock(task.id)}
+            title={task.locked ? 'Unlock task' : 'Lock task'}
+          >
+            <i className={`fas fa-${task.locked ? 'lock' : 'lock-open'}`}></i>
+          </button>
+          <button
+            className="task-action-btn"
+            onClick={() => onEdit(task)}
+            title="Edit task"
+          >
+            <i className="fas fa-edit"></i>
+          </button>
+          <button
+            className="task-action-btn delete-btn"
+            onClick={handleDelete}
+            title="Delete task"
+          >
+            <i className="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+
+      {task.description && (
+        <p className="task-description">{task.description}</p>
+      )}
+
+      <div className="task-footer">
+        <div className="task-meta">
+          <span className="task-time">
+            <i className="fas fa-clock"></i>
+            {getTaskTimeDisplay()}
+          </span>
+          {task.date && (
+            <span className="task-date">
+              <i className="fas fa-calendar"></i>
+              {new Date(task.date).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric'
+              })}
+            </span>
+          )}
+        </div>
+
+        <button
+          className="complete-btn"
+          onClick={handleComplete}
+        >
+          <i className="fas fa-check"></i>
+          Complete
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// TaskForm Component
+const TaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
+  const [task, setTask] = useState(initialTask || {
+    title: '',
+    description: '',
+    type: TASK_TYPES.FLOATING,
+    date: new Date().toISOString().split('T')[0],
+    time: '',
+    startTime: '',
+    endTime: '',
+    locked: false,
+    isDaily: false
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    if (!task.title.trim()) {
+      toast.info('Please add a task title');
+      return;
+    }
+
+    if (task.type === TASK_TYPES.TIME_BOUND && !task.time) {
+      toast.info('Please set a time for this task');
+      return;
+    }
+
+    if (task.type === TASK_TYPES.TIME_RANGE && (!task.startTime || !task.endTime)) {
+      toast.info('Please set start and end times');
+      return;
+    }
+
+    onSubmit(task);
+  };
+
+  const handleChange = (field, value) => {
+    setTask(prev => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <form className="task-form" onSubmit={handleSubmit}>
+      <div className="form-group">
+        <input
+          type="text"
+          placeholder="What do you want to do?"
+          value={task.title}
+          onChange={e => handleChange('title', e.target.value)}
+          className="task-title-input"
+          autoFocus
+        />
+      </div>
+
+      <div className="form-group">
+        <textarea
+          placeholder="Add details (optional)"
+          value={task.description}
+          onChange={e => handleChange('description', e.target.value)}
+          rows="2"
+          className="task-description-input"
+        />
+      </div>
+
+      <div className="form-row">
+        <div className="form-group">
+          <label>Task Type</label>
+          <select
+            value={task.type}
+            onChange={e => handleChange('type', e.target.value)}
+          >
+            <option value={TASK_TYPES.FLOATING}>Flexible (anytime)</option>
+            <option value={TASK_TYPES.TIME_BOUND}>Specific Time</option>
+            <option value={TASK_TYPES.TIME_RANGE}>Time Range</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Date</label>
+          <input
+            type="date"
+            value={task.date}
+            onChange={e => handleChange('date', e.target.value)}
+          />
+        </div>
+      </div>
+
+      {task.type === TASK_TYPES.TIME_BOUND && (
+        <div className="form-group">
+          <label>Time</label>
+          <input
+            type="time"
+            value={task.time}
+            onChange={e => handleChange('time', e.target.value)}
+          />
+        </div>
+      )}
+
+      {task.type === TASK_TYPES.TIME_RANGE && (
+        <div className="form-row">
+          <div className="form-group">
+            <label>Start Time</label>
+            <input
+              type="time"
+              value={task.startTime}
+              onChange={e => handleChange('startTime', e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label>End Time</label>
+            <input
+              type="time"
+              value={task.endTime}
+              onChange={e => handleChange('endTime', e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="form-options">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={task.locked}
+            onChange={e => handleChange('locked', e.target.checked)}
+          />
+          <span>
+            <i className="fas fa-lock"></i> Lock task (won't auto-move)
+          </span>
+        </label>
+
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={task.isDaily}
+            onChange={e => handleChange('isDaily', e.target.checked)}
+          />
+          <span>
+            <i className="fas fa-redo"></i> Repeat daily
+          </span>
+        </label>
+      </div>
+
+      <div className="form-actions">
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary">
+          {initialTask ? 'Update Task' : 'Add Task'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// PreferencesModal Component
+const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
+  const [preferences, setPreferences] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadPreferences();
+    }
+  }, [isOpen]);
+
+  const loadPreferences = async () => {
+    const prefs = await getPreferences();
+    setPreferences(prefs);
+  };
+
+  const handleChange = (field, value) => {
+    setPreferences(prev => {
+      const updated = { ...prev, [field]: value };
+
+      // Auto-calculate sleep hours when wake or sleep time changes
+      if (field === 'wakeUpTime' || field === 'sleepTime') {
+        const wakeTime = field === 'wakeUpTime' ? value : prev.wakeUpTime;
+        const sleepTime = field === 'sleepTime' ? value : prev.sleepTime;
+        updated.sleepTargetHours = calculateSleepHours(sleepTime, wakeTime);
+      }
+
+      return updated;
+    });
+  };
+
+  const calculateSleepHours = (sleepTime, wakeTime) => {
+    if (!sleepTime || !wakeTime) return 8;
+
+    const [sleepHour, sleepMin] = sleepTime.split(':').map(Number);
+    const [wakeHour, wakeMin] = wakeTime.split(':').map(Number);
+
+    let sleepMinutes = sleepHour * 60 + sleepMin;
+    let wakeMinutes = wakeHour * 60 + wakeMin;
+
+    // If wake time is earlier in the day than sleep time, it's the next day
+    if (wakeMinutes <= sleepMinutes) {
+      wakeMinutes += 24 * 60;
+    }
+
+    const totalMinutes = wakeMinutes - sleepMinutes;
+    const hours = totalMinutes / 60;
+
+    // Return with one decimal place
+    return Math.round(hours * 10) / 10;
+  };
+
+  const handleStudySlotChange = (index, field, value) => {
+    const newSlots = [...preferences.studySlots];
+    newSlots[index][field] = value;
+    setPreferences(prev => ({ ...prev, studySlots: newSlots }));
+  };
+
+  const addStudySlot = () => {
+    setPreferences(prev => ({
+      ...prev,
+      studySlots: [...prev.studySlots, { start: '18:00', end: '20:00' }]
+    }));
+  };
+
+  const removeStudySlot = (index) => {
+    const newSlots = preferences.studySlots.filter((_, i) => i !== index);
+    setPreferences(prev => ({ ...prev, studySlots: newSlots }));
+  };
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await savePreferences(preferences);
+      toast.success('Your preferences have been updated');
+      onUpdate && onUpdate();
+      onClose();
+    } catch (error) {
+      toast.error('Could not save preferences');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen || !preferences) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content preferences-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Your Preferences</h2>
+          <button className="close-btn" onClick={onClose}>
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="preference-section">
+            <h3>Daily Schedule</h3>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Sleep Time (Night)</label>
+                <input
+                  type="time"
+                  value={preferences.sleepTime}
+                  onChange={e => handleChange('sleepTime', e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Wake-up Time (Morning)</label>
+                <input
+                  type="time"
+                  value={preferences.wakeUpTime}
+                  onChange={e => handleChange('wakeUpTime', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Sleep Duration (calculated)</label>
+              <div className="calculated-value">
+                <i className="fas fa-moon"></i>
+                <span>{preferences.sleepTargetHours} hours</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="preference-section">
+            <h3>Office Hours (Optional)</h3>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Start Time</label>
+                <input
+                  type="time"
+                  value={preferences.officeStartTime || ''}
+                  onChange={e => handleChange('officeStartTime', e.target.value || null)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>End Time</label>
+                <input
+                  type="time"
+                  value={preferences.officeEndTime || ''}
+                  onChange={e => handleChange('officeEndTime', e.target.value || null)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="preference-section">
+            <h3>Study Time Slots</h3>
+
+            {preferences.studySlots.map((slot, index) => (
+              <div key={index} className="form-row slot-row">
+                <div className="form-group">
+                  <label>From</label>
+                  <input
+                    type="time"
+                    value={slot.start}
+                    onChange={e => handleStudySlotChange(index, 'start', e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>To</label>
+                  <input
+                    type="time"
+                    value={slot.end}
+                    onChange={e => handleStudySlotChange(index, 'end', e.target.value)}
+                  />
+                </div>
+
+                <button
+                  className="icon-btn remove-btn"
+                  onClick={() => removeStudySlot(index)}
+                  title="Remove slot"
+                >
+                  <i className="fas fa-trash"></i>
+                </button>
+              </div>
+            ))}
+
+            <button className="add-slot-btn" onClick={addStudySlot}>
+              <i className="fas fa-plus"></i> Add Study Slot
+            </button>
+          </div>
+
+          <div className="preference-section">
+            <h3>Breaks</h3>
+
+            <div className="form-group">
+              <label>Break Duration (minutes)</label>
+              <input
+                type="number"
+                min="5"
+                max="60"
+                step="5"
+                value={preferences.breakDuration}
+                onChange={e => handleChange('breakDuration', parseInt(e.target.value))}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Break Frequency (every X minutes)</label>
+              <input
+                type="number"
+                min="30"
+                max="240"
+                step="15"
+                value={preferences.breakFrequency}
+                onChange={e => handleChange('breakFrequency', parseInt(e.target.value))}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={loading}
+          >
+            {loading ? 'Saving...' : 'Save Preferences'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// SettingsModal Component
+const SettingsModal = ({ isOpen, onClose }) => {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadSettings();
+    }
+  }, [isOpen]);
+
+  const loadSettings = async () => {
+    const appSettings = await getSettings();
+    setSettings(appSettings);
+  };
+
+  const handleExport = async () => {
+    try {
+      await exportData();
+      toast.success('Your data has been backed up successfully');
+    } catch (error) {
+      toast.error('Could not export data');
+    }
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setLoading(true);
+    try {
+      await importData(file);
+      toast.success('Data restored successfully');
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (error) {
+      toast.error('Could not restore data. Please check the file.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAutoBackupChange = async (value) => {
+    const newSettings = { ...settings, autoBackup: value };
+    setSettings(newSettings);
+    await saveSettings(newSettings);
+    toast.info(value ? 'Auto-backup enabled' : 'Auto-backup disabled');
+  };
+
+  const handleBackupFrequencyChange = async (value) => {
+    const newSettings = { ...settings, backupFrequency: value };
+    setSettings(newSettings);
+    await saveSettings(newSettings);
+  };
+
+  const handleClearData = async () => {
+    if (window.confirm('Are you sure? This will delete all your data permanently.')) {
+      try {
+        await clearAllData();
+        toast.info('All data cleared');
+        setTimeout(() => window.location.reload(), 1000);
+      } catch (error) {
+        toast.error('Could not clear data');
+      }
+    }
+  };
+
+  if (!isOpen || !settings) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content settings-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Settings</h2>
+          <button className="close-btn" onClick={onClose}>
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="setting-section">
+            <h3>Backup & Restore</h3>
+
+            <div className="setting-item">
+              <button className="btn btn-primary" onClick={handleExport}>
+                <i className="fas fa-download"></i> Create Backup
+              </button>
+              <p className="setting-description">
+                Export all your tasks and preferences
+              </p>
+            </div>
+
+            <div className="setting-item">
+              <label htmlFor="import-file" className="btn btn-secondary">
+                <i className="fas fa-upload"></i> Restore Backup
+              </label>
+              <input
+                id="import-file"
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                style={{ display: 'none' }}
+                disabled={loading}
+              />
+              <p className="setting-description">
+                Import previously backed up data
+              </p>
+            </div>
+
+            {settings.lastBackup && (
+              <p className="last-backup">
+                Last backup: {new Date(settings.lastBackup).toLocaleString()}
+              </p>
+            )}
+          </div>
+
+          <div className="setting-section">
+            <h3>Auto-Backup Preferences</h3>
+
+            <div className="setting-item checkbox-item">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={settings.autoBackup}
+                  onChange={e => handleAutoBackupChange(e.target.checked)}
+                />
+                <span>Enable automatic backups</span>
+              </label>
+            </div>
+
+            {settings.autoBackup && (
+              <div className="setting-item">
+                <label>Backup Frequency</label>
+                <select
+                  value={settings.backupFrequency}
+                  onChange={e => handleBackupFrequencyChange(e.target.value)}
+                >
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="setting-section danger-zone">
+            <h3>Danger Zone</h3>
+
+            <div className="setting-item">
+              <button className="btn btn-danger" onClick={handleClearData}>
+                <i className="fas fa-exclamation-triangle"></i> Clear All Data
+              </button>
+              <p className="setting-description">
+                Permanently delete all tasks and preferences
+              </p>
+            </div>
+          </div>
+
+          <div className="setting-section app-info">
+            <h3>About Daynix</h3>
+            <p>Version 1.0</p>
+            <p>A flexible, adaptive day activity manager that works around your life.</p>
+            <p className="privacy-note">
+              <i className="fas fa-lock"></i> All data is stored locally on your device. No account required.
+            </p>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Main App Component
 function App() {
   const [tasks, setTasks] = useState([]);
   const [categorizedTasks, setCategorizedTasks] = useState({
@@ -23,11 +700,38 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferences, setPreferences] = useState(null);
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState('dark');
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
     loadData();
-    
+
+    // Check if app is already installed
+    if (window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true) {
+      setIsInstalled(true);
+    }
+
+    // Listen for install prompt
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      console.log('PWA install prompt available');
+      setDeferredPrompt(e);
+      setIsInstalled(false); // Ensure we show as installable
+    };
+
+    // Listen for app installed event
+    const handleAppInstalled = () => {
+      console.log('PWA installed');
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      toast.success('Daynix installed!');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
     // Re-categorize tasks every minute
     const interval = setInterval(() => {
       if (tasks.length > 0) {
@@ -36,7 +740,11 @@ function App() {
       }
     }, 60000);
 
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -48,7 +756,7 @@ function App() {
   }, [tasks]);
 
   useEffect(() => {
-    document.body.className = theme === 'dark' ? 'dark-mode' : '';
+    document.body.classList.toggle('dark-mode', theme === 'dark')
   }, [theme]);
 
   const loadData = async () => {
@@ -62,23 +770,23 @@ function App() {
   const handleDailyTasks = async () => {
     const dailyTasks = tasks.filter(t => t.isDaily && !t.parentTaskId);
     let hasNewInstances = false;
-    
+
     for (const task of dailyTasks) {
       if (shouldCreateDailyInstance(task)) {
         const instance = createDailyInstance(task);
-        
+
         // Save the instance to storage
         await addTask(instance);
-        
+
         // Update parent task's last instance date
         await updateTask(task.id, {
           lastDailyInstance: new Date().toISOString()
         });
-        
+
         hasNewInstances = true;
       }
     }
-    
+
     // Reload all tasks if we created new instances
     if (hasNewInstances) {
       await loadData();
@@ -98,7 +806,7 @@ function App() {
 
   const handleUpdateTask = async (taskData) => {
     await updateTask(editingTask.id, taskData);
-    const updatedTasks = tasks.map(t => 
+    const updatedTasks = tasks.map(t =>
       t.id === editingTask.id ? { ...t, ...taskData } : t
     );
     setTasks(updatedTasks);
@@ -141,7 +849,7 @@ function App() {
 
   const handleAutoMoveOldTasks = async () => {
     const tasksToMove = categorizedTasks.old.filter(t => !t.locked && !t.completed);
-    
+
     if (tasksToMove.length === 0) {
       toast.info('No tasks to move');
       return;
@@ -159,7 +867,7 @@ function App() {
   const toggleTheme = async () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
-    
+
     if (preferences) {
       const updatedPrefs = { ...preferences, theme: newTheme };
       setPreferences(updatedPrefs);
@@ -168,13 +876,26 @@ function App() {
     }
   };
 
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === 'accepted') {
+      toast.success('Installing...');
+    }
+
+    setDeferredPrompt(null);
+  };
+
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-content">
           <div className="logo-section">
             <i className="fas fa-water"></i>
-            <h1>FlowDay</h1>
+            <h1>Daynix</h1>
           </div>
           <div className="header-actions">
             <button
@@ -342,14 +1063,19 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>
-          <i className="fas fa-heart"></i>
-          FlowDay - Your flexible companion
-        </p>
-        <p className="privacy-text">
-          <i className="fas fa-shield-alt"></i>
-          All data stays on your device
-        </p>
+        <div className="footer-content">
+          <p className="footer-text">
+            © Daynix - Your Flexible Companion
+          </p>
+          <button
+            className={`install-btn ${isInstalled || !deferredPrompt ? 'inactive' : 'active'}`}
+            onClick={handleInstall}
+            disabled={isInstalled || !deferredPrompt}
+          >
+            <i className="fas fa-download"></i>
+            Install App
+          </button>
+        </div>
       </footer>
 
       <SettingsModal
@@ -373,7 +1099,7 @@ function App() {
         pauseOnFocusLoss={false}
         draggable
         pauseOnHover
-        theme={theme}
+        theme={theme === 'dark' ? 'dark' : 'light'}
       />
     </div>
   );
