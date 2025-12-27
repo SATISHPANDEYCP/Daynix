@@ -6,8 +6,141 @@ import { getTasks, addTask, updateTask, deleteTask, getPreferences, savePreferen
 import { categorizeTasks, autoMoveTask, shouldCreateDailyInstance, createDailyInstance, TASK_TYPES, formatTime, getTimeUntil } from './utils/taskHelpers';
 import './App.css';
 
+// Stopwatch Component for Running Tasks
+const Stopwatch = ({ task }) => {
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  useEffect(() => {
+    let startTime;
+    
+    // Calculate start time based on task type
+    if (task.type === TASK_TYPES.TIME_BOUND && task.time && task.date) {
+      startTime = new Date(task.date + 'T' + task.time);
+    } else if (task.type === TASK_TYPES.TIME_RANGE && task.startTime && task.date) {
+      startTime = new Date(task.date + 'T' + task.startTime);
+    } else {
+      // For floating tasks or if no time, use current time
+      startTime = new Date();
+    }
+
+    const updateTimer = () => {
+      const now = new Date();
+      const diff = Math.max(0, Math.floor((now - startTime) / 1000));
+      setElapsedTime(diff);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [task]);
+
+  const formatElapsedTime = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hrs > 0) {
+      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="stopwatch">
+      <div className="stopwatch-icon">
+        <i className="fas fa-stopwatch"></i>
+      </div>
+      <div className="stopwatch-time">{formatElapsedTime(elapsedTime)}</div>
+      <div className="stopwatch-label">Elapsed Time</div>
+    </div>
+  );
+};
+
+// ActivityCard Component (for office/study auto-generated activities)
+const ActivityCard = ({ title, startTime, endTime, icon, type }) => {
+  const getMotivationalQuote = () => {
+    if (type === 'office') {
+      return "When you have free time, consider reading something to expand your knowledge.";
+    }
+    
+    if (type === 'study') {
+      const studyQuotes = [
+        "Success is the sum of small efforts repeated day in and day out.",
+        "The expert in anything was once a beginner. Keep going!",
+        "Education is not preparation for life; education is life itself.",
+        "The more that you read, the more things you will know.",
+        "Learning never exhausts the mind. Stay curious!",
+        "Don't stop when you're tired. Stop when you're done.",
+        "The beautiful thing about learning is that no one can take it away from you.",
+        "Every accomplishment starts with the decision to try.",
+        "Strive for progress, not perfection.",
+        "The future depends on what you do today.",
+        "Believe you can and you're halfway there.",
+        "Your limitation—it's only your imagination.",
+        "Push yourself, because no one else is going to do it for you.",
+        "Great things never come from comfort zones.",
+        "Dream it. Wish it. Do it.",
+        "Success doesn't just find you. You have to go out and get it.",
+        "The harder you work for something, the greater you'll feel when you achieve it.",
+        "Dream bigger. Do bigger.",
+        "Don't wait for opportunity. Create it.",
+        "Sometimes we're tested not to show our weaknesses, but to discover our strengths.",
+        "The key to success is to focus on goals, not obstacles.",
+        "Dedication and hard work will always beat talent without effort.",
+        "Study while others are sleeping; work while others are loafing.",
+        "Small daily improvements are the key to staggering long-term results.",
+        "You don't have to be great to start, but you have to start to be great.",
+        "Focus on being productive instead of busy.",
+        "The only way to do great work is to love what you do.",
+        "Excellence is not a destination; it is a continuous journey.",
+        "Your mind is a powerful thing. When you fill it with positive thoughts, your life will start to change.",
+        "The difference between ordinary and extraordinary is that little extra."
+      ];
+      
+      // Use start time to generate unique index for different study sessions
+      const [hours, minutes] = startTime.split(':').map(Number);
+      const timeIndex = hours * 60 + minutes;
+      const quoteIndex = timeIndex % studyQuotes.length;
+      
+      return studyQuotes[quoteIndex];
+    }
+    
+    return null;
+  };
+
+  const quote = getMotivationalQuote();
+
+  return (
+    <div className="activity-card">
+      <div className="activity-header">
+        <div className="activity-icon">
+          <i className={`fas fa-${icon}`}></i>
+        </div>
+        <div className="activity-info">
+          <h3 className="activity-title">{title}</h3>
+          <span className="activity-badge">
+            <i className="fas fa-circle-dot"></i> Active Now
+          </span>
+        </div>
+      </div>
+      {quote && (
+        <div className="activity-quote">
+          <i className="fas fa-quote-left"></i>
+          <p>{quote}</p>
+        </div>
+      )}
+      <div className="activity-time">
+        <i className="fas fa-clock"></i>
+        {formatTime(startTime)} - {formatTime(endTime)}
+      </div>
+      <Stopwatch task={{ type: 'timeRange', startTime, date: new Date().toISOString().split('T')[0] }} />
+    </div>
+  );
+};
+
 // TaskCard Component
-const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock }) => {
+const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwatch = false }) => {
   const [isCompleting, setIsCompleting] = useState(false);
   const [undoTimer, setUndoTimer] = useState(null);
 
@@ -54,7 +187,8 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock }) => {
     }
 
     if (task.type === TASK_TYPES.TIME_BOUND) {
-      const timeUntil = getTimeUntil(task.time);
+      // For completed tasks, don't show countdown
+      const timeUntil = task.completed ? null : getTimeUntil(task.time, task.date);
       return (
         <span className="time-display">
           {formatTime(task.time)}
@@ -64,15 +198,44 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock }) => {
     }
 
     if (task.type === TASK_TYPES.TIME_RANGE) {
-      return `${formatTime(task.startTime)} - ${formatTime(task.endTime)}`;
+      // For completed tasks, don't show countdown
+      const timeUntil = task.completed ? null : getTimeUntil(task.startTime, task.date);
+      return (
+        <span className="time-display">
+          {formatTime(task.startTime)} - {formatTime(task.endTime)}
+          {timeUntil && <span className="time-until">{timeUntil}</span>}
+        </span>
+      );
     }
   };
 
+  const getCompletionTime = () => {
+    if (!task.completedAt) return null;
+    const completedDate = new Date(task.completedAt);
+    const now = new Date();
+    const diffMs = now - completedDate;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return completedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   return (
-    <div className={`task-card ${task.locked ? 'locked' : ''}`}>
+    <div className={`task-card ${task.locked ? 'locked' : ''} ${task.completed ? 'completed' : ''}`}>
       <div className="task-card-header">
         <div className="task-title-section">
           <h3 className="task-title">{task.title}</h3>
+          {task.completed && (
+            <span className="task-badge completed-badge">
+              <i className="fas fa-check-circle"></i> Done
+            </span>
+          )}
           {task.isDaily && (
             <span className="task-badge daily-badge">
               <i className="fas fa-redo"></i> Daily
@@ -113,12 +276,23 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock }) => {
         <p className="task-description">{task.description}</p>
       )}
 
+      {showStopwatch && (
+        <Stopwatch task={task} />
+      )}
+
       <div className="task-footer">
         <div className="task-meta">
-          <span className="task-time">
-            <i className="fas fa-clock"></i>
-            {getTaskTimeDisplay()}
-          </span>
+          {task.completed && task.completedAt ? (
+            <span className="task-completed-time">
+              <i className="fas fa-check-double"></i>
+              Completed {getCompletionTime()}
+            </span>
+          ) : (
+            <span className="task-time">
+              <i className="fas fa-clock"></i>
+              {getTaskTimeDisplay()}
+            </span>
+          )}
           {task.date && (
             <span className="task-date">
               <i className="fas fa-calendar"></i>
@@ -422,6 +596,9 @@ const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
   };
 
   const handleChange = (field, value) => {
+    // No validation needed - overnight sessions are allowed
+    // (end time before start time means it continues to next day)
+    
     setPreferences(prev => {
       const updated = { ...prev, [field]: value };
 
@@ -460,13 +637,15 @@ const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
   const handleStudySlotChange = (index, field, value) => {
     const newSlots = [...preferences.studySlots];
     newSlots[index][field] = value;
+    // No validation needed - overnight sessions are allowed
+    // (end time before start time means it continues to next day)
     setPreferences(prev => ({ ...prev, studySlots: newSlots }));
   };
 
   const addStudySlot = () => {
     setPreferences(prev => ({
       ...prev,
-      studySlots: [...prev.studySlots, { start: '18:00', end: '20:00' }]
+      studySlots: [...prev.studySlots, { start: '18:00', end: '20:00', days: [] }]
     }));
   };
 
@@ -537,59 +716,170 @@ const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
           <div className="preference-section">
             <h3>Office Hours (Optional)</h3>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Start Time</label>
-                <input
-                  type="time"
-                  value={preferences.officeStartTime || ''}
-                  onChange={e => handleChange('officeStartTime', e.target.value || null)}
-                />
-              </div>
+            {preferences.officeStartTime && preferences.officeEndTime ? (
+              <>
+                <div className="study-slot-container">
+                  <div className="form-row slot-row">
+                    <div className="form-group">
+                      <label>Start Time</label>
+                      <input
+                        type="time"
+                        value={preferences.officeStartTime || ''}
+                        onChange={e => handleChange('officeStartTime', e.target.value || null)}
+                      />
+                    </div>
 
-              <div className="form-group">
-                <label>End Time</label>
-                <input
-                  type="time"
-                  value={preferences.officeEndTime || ''}
-                  onChange={e => handleChange('officeEndTime', e.target.value || null)}
-                />
-              </div>
-            </div>
+                    <div className="form-group">
+                      <label>End Time</label>
+                      <input
+                        type="time"
+                        value={preferences.officeEndTime || ''}
+                        onChange={e => handleChange('officeEndTime', e.target.value || null)}
+                      />
+                      {(() => {
+                        const [startH, startM] = preferences.officeStartTime.split(':').map(Number);
+                        const [endH, endM] = preferences.officeEndTime.split(':').map(Number);
+                        const isOvernight = (endH * 60 + endM) < (startH * 60 + startM);
+                        return isOvernight ? (
+                          <span className="overnight-badge">
+                            <i className="fas fa-moon"></i> Next day
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+
+                    <button
+                      className="icon-btn remove-btn"
+                      onClick={() => {
+                        handleChange('officeStartTime', null);
+                        handleChange('officeEndTime', null);
+                        handleChange('officeDays', []);
+                      }}
+                      title="Remove office hours"
+                    >
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
+                  <div className="form-group">
+                    <label>Office Days</label>
+                    <div className="days-selector">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          className={`day-btn ${(preferences.officeDays || []).includes(index) ? 'active' : ''}`}
+                          onClick={() => {
+                            const days = preferences.officeDays || [];
+                            const newDays = days.includes(index)
+                              ? days.filter(d => d !== index)
+                              : [...days, index].sort();
+                            handleChange('officeDays', newDays);
+                          }}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="empty-slots-message">
+                <i className="fas fa-info-circle"></i>
+                No office hours set. Click below to add your office schedule.
+              </p>
+            )}
+
+            {!preferences.officeStartTime && !preferences.officeEndTime && (
+              <button 
+                className="add-slot-btn" 
+                onClick={() => {
+                  handleChange('officeStartTime', '09:00');
+                  handleChange('officeEndTime', '17:00');
+                }}
+              >
+                <i className="fas fa-plus"></i> Add Office Hours
+              </button>
+            )}
           </div>
 
           <div className="preference-section">
             <h3>Study Time Slots</h3>
 
-            {preferences.studySlots.map((slot, index) => (
-              <div key={index} className="form-row slot-row">
-                <div className="form-group">
-                  <label>From</label>
-                  <input
-                    type="time"
-                    value={slot.start}
-                    onChange={e => handleStudySlotChange(index, 'start', e.target.value)}
-                  />
-                </div>
+            {preferences.studySlots && preferences.studySlots.length > 0 ? (
+              <>
+                {preferences.studySlots.map((slot, index) => {
+                  const [startH, startM] = slot.start.split(':').map(Number);
+                  const [endH, endM] = slot.end.split(':').map(Number);
+                  const startMins = startH * 60 + startM;
+                  const endMins = endH * 60 + endM;
+                  const isOvernight = endMins < startMins;
+                  
+                  return (
+                  <div key={index} className="study-slot-container">
+                    <div className="form-row slot-row">
+                      <div className="form-group">
+                        <label>From</label>
+                        <input
+                          type="time"
+                          value={slot.start}
+                          onChange={e => handleStudySlotChange(index, 'start', e.target.value)}
+                        />
+                      </div>
 
-                <div className="form-group">
-                  <label>To</label>
-                  <input
-                    type="time"
-                    value={slot.end}
-                    onChange={e => handleStudySlotChange(index, 'end', e.target.value)}
-                  />
-                </div>
+                      <div className="form-group">
+                        <label>To</label>
+                        <input
+                          type="time"
+                          value={slot.end}
+                          onChange={e => handleStudySlotChange(index, 'end', e.target.value)}
+                        />
+                        {isOvernight && (
+                          <span className="overnight-badge">
+                            <i className="fas fa-moon"></i> Next day
+                          </span>
+                        )}
+                      </div>
 
-                <button
-                  className="icon-btn remove-btn"
-                  onClick={() => removeStudySlot(index)}
-                  title="Remove slot"
-                >
-                  <i className="fas fa-trash"></i>
-                </button>
-              </div>
-            ))}
+                      <button
+                        className="icon-btn remove-btn"
+                        onClick={() => removeStudySlot(index)}
+                        title="Remove slot"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                    <div className="form-group">
+                      <label>Study Days</label>
+                      <div className="days-selector">
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, dayIndex) => (
+                          <button
+                            key={dayIndex}
+                            type="button"
+                            className={`day-btn ${(slot.days || []).includes(dayIndex) ? 'active' : ''}`}
+                            onClick={() => {
+                              const days = slot.days || [];
+                              const newDays = days.includes(dayIndex)
+                                ? days.filter(d => d !== dayIndex)
+                                : [...days, dayIndex].sort();
+                              handleStudySlotChange(index, 'days', newDays);
+                            }}
+                          >
+                            {day}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })}
+              </>
+            ) : (
+              <p className="empty-slots-message">
+                <i className="fas fa-info-circle"></i>
+                No study slots set. Click below to add your first study time.
+              </p>
+            )}
 
             <button className="add-slot-btn" onClick={addStudySlot}>
               <i className="fas fa-plus"></i> Add Study Slot
@@ -646,6 +936,7 @@ const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
 const SettingsModal = ({ isOpen, onClose }) => {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [backupLocation, setBackupLocation] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -656,14 +947,91 @@ const SettingsModal = ({ isOpen, onClose }) => {
   const loadSettings = async () => {
     const appSettings = await getSettings();
     setSettings(appSettings);
+    setBackupLocation(appSettings.backupLocation || null);
   };
 
-  const handleExport = async () => {
+  const handleAddBackupLocation = async () => {
+    try {
+      // Request directory picker (only works in modern browsers)
+      if ('showDirectoryPicker' in window) {
+        const dirHandle = await window.showDirectoryPicker();
+        const newSettings = { 
+          ...settings, 
+          backupLocation: dirHandle.name
+          // Note: backupHandle is stored in state only, not in IndexedDB (can't be serialized)
+        };
+        setSettings({ ...newSettings, backupHandle: dirHandle });
+        await saveSettings(newSettings); // Save without backupHandle
+        setBackupLocation(dirHandle.name);
+        toast.success('Backup location set: ' + dirHandle.name);
+      } else {
+        toast.info('Directory picker not supported. Use Download Backup instead.');
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        toast.error('Could not set backup location');
+      }
+    }
+  };
+
+  const handleDownloadBackup = async () => {
     try {
       await exportData();
-      toast.success('Your data has been backed up successfully');
+      toast.success('Backup downloaded successfully');
     } catch (error) {
-      toast.error('Could not export data');
+      toast.error('Could not download backup');
+    }
+  };
+
+  const handleForgetLocation = async () => {
+    if (window.confirm('Forget backup location preference?')) {
+      const newSettings = { ...settings, backupLocation: null, backupHandle: null };
+      setSettings(newSettings);
+      await saveSettings(newSettings);
+      setBackupLocation(null);
+      toast.info('Backup location forgotten');
+    }
+  };
+
+  const handleUpdateBackup = async () => {
+    try {
+      if ('showDirectoryPicker' in window) {
+        let dirHandle = settings.backupHandle;
+        
+        // If handle is lost, request permission again
+        if (!dirHandle && settings.backupLocation) {
+          toast.info('Please select the backup folder again');
+          dirHandle = await window.showDirectoryPicker();
+          setSettings({ ...settings, backupHandle: dirHandle });
+        }
+        
+        if (dirHandle) {
+          // Save to the stored location
+          const data = await exportData(true); // Get data without downloading
+          const fileHandle = await dirHandle.getFileHandle(
+            `daynix-backup-${new Date().toISOString().split('T')[0]}.json`,
+            { create: true }
+          );
+          const stream = await fileHandle.createWritable();
+          await stream.write(data);
+          await stream.close();
+          
+          const newSettings = { ...settings, lastBackup: new Date().toISOString() };
+          await saveSettings(newSettings);
+          setSettings({ ...newSettings, backupHandle: dirHandle });
+          toast.success('Backup updated successfully');
+        } else {
+          // Fallback to download
+          await handleDownloadBackup();
+        }
+      } else {
+        // Fallback to download
+        await handleDownloadBackup();
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        toast.error('Could not update backup');
+      }
     }
   };
 
@@ -681,19 +1049,6 @@ const SettingsModal = ({ isOpen, onClose }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleAutoBackupChange = async (value) => {
-    const newSettings = { ...settings, autoBackup: value };
-    setSettings(newSettings);
-    await saveSettings(newSettings);
-    toast.info(value ? 'Auto-backup enabled' : 'Auto-backup disabled');
-  };
-
-  const handleBackupFrequencyChange = async (value) => {
-    const newSettings = { ...settings, backupFrequency: value };
-    setSettings(newSettings);
-    await saveSettings(newSettings);
   };
 
   const handleClearData = async () => {
@@ -724,17 +1079,60 @@ const SettingsModal = ({ isOpen, onClose }) => {
           <div className="setting-section">
             <h3>Backup & Restore</h3>
 
+            {!backupLocation ? (
+              <div className="setting-item">
+                <button className="btn btn-primary btn-standard" onClick={handleAddBackupLocation}>
+                  <i className="fas fa-folder-plus"></i> Add Backup Location
+                </button>
+                <p className="setting-description">
+                  Set a folder where backups will be saved
+                </p>
+              </div>
+            ) : (
+              <div className="setting-item">
+                <div className="backup-location-display">
+                  <i className="fas fa-folder-open"></i>
+                  <span>{backupLocation}</span>
+                </div>
+                <p className="setting-description">
+                  Backup location is set
+                </p>
+              </div>
+            )}
+
             <div className="setting-item">
-              <button className="btn btn-primary" onClick={handleExport}>
-                <i className="fas fa-download"></i> Create Backup
+              <button className="btn btn-primary btn-standard" onClick={handleDownloadBackup}>
+                <i className="fas fa-download"></i> Download Backup
               </button>
               <p className="setting-description">
-                Export all your tasks and preferences
+                Download backup file as JSON to your device
               </p>
             </div>
 
+            {backupLocation && (
+              <>
+                <div className="setting-item">
+                  <button className="btn btn-secondary btn-standard" onClick={handleUpdateBackup}>
+                    <i className="fas fa-sync"></i> Update Backup
+                  </button>
+                  <p className="setting-description">
+                    Update the backup file in saved location
+                  </p>
+                </div>
+
+                <div className="setting-item">
+                  <button className="btn btn-secondary btn-standard" onClick={handleForgetLocation}>
+                    <i className="fas fa-times-circle"></i> Forget Backup Location
+                  </button>
+                  <p className="setting-description">
+                    Remove saved backup location preference
+                  </p>
+                </div>
+              </>
+            )}
+
             <div className="setting-item">
-              <label htmlFor="import-file" className="btn btn-secondary">
+              <label htmlFor="import-file" className="btn btn-secondary btn-standard">
                 <i className="fas fa-upload"></i> Restore Backup
               </label>
               <input
@@ -752,37 +1150,8 @@ const SettingsModal = ({ isOpen, onClose }) => {
 
             {settings.lastBackup && (
               <p className="last-backup">
-                Last backup: {new Date(settings.lastBackup).toLocaleString()}
+                <i className="fas fa-clock"></i> Last backup: {new Date(settings.lastBackup).toLocaleString()}
               </p>
-            )}
-          </div>
-
-          <div className="setting-section">
-            <h3>Auto-Backup Preferences</h3>
-
-            <div className="setting-item checkbox-item">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={settings.autoBackup}
-                  onChange={e => handleAutoBackupChange(e.target.checked)}
-                />
-                <span>Enable automatic backups</span>
-              </label>
-            </div>
-
-            {settings.autoBackup && (
-              <div className="setting-item">
-                <label>Backup Frequency</label>
-                <select
-                  value={settings.backupFrequency}
-                  onChange={e => handleBackupFrequencyChange(e.target.value)}
-                >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
             )}
           </div>
 
@@ -790,7 +1159,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
             <h3>Danger Zone</h3>
 
             <div className="setting-item">
-              <button className="btn btn-danger" onClick={handleClearData}>
+              <button className="btn btn-danger btn-standard" onClick={handleClearData}>
                 <i className="fas fa-exclamation-triangle"></i> Clear All Data
               </button>
               <p className="setting-description">
@@ -842,13 +1211,9 @@ function App() {
   const [isInstalled, setIsInstalled] = useState(false);
   const [currentView, setCurrentView] = useState('main'); // 'main' or 'tasks'
   const [searchQuery, setSearchQuery] = useState('');
-  const [notificationPermission, setNotificationPermission] = useState(
-    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
-  );
 
   useEffect(() => {
     loadData();
-    requestNotificationPermission();
 
     // Check if app is already installed
     if (window.matchMedia('(display-mode: standalone)').matches ||
@@ -895,7 +1260,6 @@ function App() {
       const categorized = categorizeTasks(tasks);
       setCategorizedTasks(categorized);
       handleDailyTasks();
-      scheduleNotifications(tasks);
     }
   }, [tasks]);
 
@@ -909,6 +1273,97 @@ function App() {
     setTasks(loadedTasks);
     setPreferences(prefs);
     setTheme(prefs.theme || 'dark');
+  };
+
+  const getActiveActivities = () => {
+    if (!preferences) return [];
+    
+    const now = new Date();
+    const currentDay = now.getDay(); // 0=Sunday, 1=Monday, etc.
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+    const activities = [];
+
+    // Check office hours
+    if (preferences.officeStartTime && preferences.officeEndTime) {
+      const officeDays = preferences.officeDays || [];
+      const yesterdayDay = (currentDay - 1 + 7) % 7;
+      
+      const [startH, startM] = preferences.officeStartTime.split(':').map(Number);
+      const [endH, endM] = preferences.officeEndTime.split(':').map(Number);
+      const startMins = startH * 60 + startM;
+      const endMins = endH * 60 + endM;
+      const isOvernightSession = endMins < startMins;
+      
+      let isActive = false;
+      
+      if (isOvernightSession) {
+        // Overnight session: check if started yesterday or today
+        if (officeDays.includes(currentDay) && currentTime >= startMins) {
+          isActive = true; // Started today, still going
+        } else if (officeDays.includes(yesterdayDay) && currentTime <= endMins) {
+          isActive = true; // Started yesterday, ending today
+        }
+      } else {
+        // Same-day session
+        if (officeDays.includes(currentDay) && currentTime >= startMins && currentTime <= endMins) {
+          isActive = true;
+        }
+      }
+      
+      if (isActive) {
+        activities.push({
+          id: 'office-session',
+          title: 'Office Hours',
+          startTime: preferences.officeStartTime,
+          endTime: preferences.officeEndTime,
+          icon: 'briefcase',
+          type: 'office'
+        });
+      }
+    }
+
+    // Check study slots
+    if (preferences.studySlots && preferences.studySlots.length > 0) {
+      const yesterdayDay = (currentDay - 1 + 7) % 7;
+      
+      preferences.studySlots.forEach((slot, index) => {
+        const slotDays = slot.days || [];
+        const [startH, startM] = slot.start.split(':').map(Number);
+        const [endH, endM] = slot.end.split(':').map(Number);
+        const startMins = startH * 60 + startM;
+        const endMins = endH * 60 + endM;
+        const isOvernightSession = endMins < startMins;
+        
+        let isActive = false;
+        
+        if (isOvernightSession) {
+          // Overnight session: check if started yesterday or today
+          if (slotDays.includes(currentDay) && currentTime >= startMins) {
+            isActive = true; // Started today, still going
+          } else if (slotDays.includes(yesterdayDay) && currentTime <= endMins) {
+            isActive = true; // Started yesterday, ending today
+          }
+        } else {
+          // Same-day session
+          if (slotDays.includes(currentDay) && currentTime >= startMins && currentTime <= endMins) {
+            isActive = true;
+          }
+        }
+        
+        if (isActive) {
+          activities.push({
+            id: `study-session-${index}`,
+            title: 'Study Time',
+            startTime: slot.start,
+            endTime: slot.end,
+            icon: 'book',
+            type: 'study'
+          });
+        }
+      });
+    }
+
+    return activities;
   };
 
   const handleDailyTasks = async () => {
@@ -935,66 +1390,6 @@ function App() {
     if (hasNewInstances) {
       await loadData();
     }
-  };
-
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
-      if (permission === 'granted') {
-        toast.success('Notifications enabled!');
-      }
-    }
-  };
-
-  const scheduleNotifications = (tasksList) => {
-    if (!('Notification' in window) || Notification.permission !== 'granted') {
-      return;
-    }
-
-    tasksList.forEach(task => {
-      if (task.completed) return;
-
-      const now = new Date();
-      let taskDateTime = null;
-
-      // Get task start time
-      if (task.type === TASK_TYPES.TIME_BOUND && task.time) {
-        taskDateTime = new Date(task.date + 'T' + task.time);
-      } else if (task.type === TASK_TYPES.TIME_RANGE && task.startTime) {
-        taskDateTime = new Date(task.date + 'T' + task.startTime);
-      }
-
-      if (!taskDateTime || taskDateTime <= now) return;
-
-      // Schedule notification 10 minutes before
-      const reminderTime = new Date(taskDateTime.getTime() - 10 * 60 * 1000);
-      const timeUntilReminder = reminderTime.getTime() - now.getTime();
-
-      if (timeUntilReminder > 0 && timeUntilReminder < 24 * 60 * 60 * 1000) {
-        setTimeout(() => {
-          new Notification('Task Reminder 🔔', {
-            body: `"${task.title}" starts in 10 minutes`,
-            icon: '/pwa-192.png',
-            tag: `task-${task.id}`,
-            requireInteraction: false
-          });
-        }, timeUntilReminder);
-      }
-
-      // Schedule notification at task start
-      const timeUntilStart = taskDateTime.getTime() - now.getTime();
-      if (timeUntilStart > 0 && timeUntilStart < 24 * 60 * 60 * 1000) {
-        setTimeout(() => {
-          new Notification('Task Starting Now! 🚀', {
-            body: `"${task.title}" is starting now`,
-            icon: '/pwa-192.png',
-            tag: `task-start-${task.id}`,
-            requireInteraction: false
-          });
-        }, timeUntilStart);
-      }
-    });
   };
 
   const handleAddTask = async (taskData) => {
@@ -1160,16 +1555,28 @@ function App() {
           {/* MAIN VIEW - Only Running or Next Upcoming */}
           {currentView === 'main' && (
             <>
-              {categorizedTasks.running.length > 0 ? (
+              {(categorizedTasks.running.length > 0 || getActiveActivities().length > 0) ? (
                 <section className="task-section running-section">
                   <div className="section-header">
                     <h2>
                       <i className="fas fa-play-circle"></i>
                       Running Now
                     </h2>
-                    <span className="task-count">{categorizedTasks.running.length}</span>
+                    <span className="task-count">{categorizedTasks.running.length + getActiveActivities().length}</span>
                   </div>
                   <div className="task-list">
+                    {/* Show active office/study activities */}
+                    {getActiveActivities().map(activity => (
+                      <ActivityCard
+                        key={activity.id}
+                        title={activity.title}
+                        startTime={activity.startTime}
+                        endTime={activity.endTime}
+                        icon={activity.icon}
+                        type={activity.type}
+                      />
+                    ))}
+                    {/* Show running tasks */}
                     {categorizedTasks.running.map(task => (
                       <TaskCard
                         key={task.id}
@@ -1178,6 +1585,7 @@ function App() {
                         onDelete={handleDeleteTask}
                         onEdit={handleEditTask}
                         onToggleLock={handleToggleLock}
+                        showStopwatch={true}
                       />
                     ))}
                   </div>
@@ -1269,16 +1677,28 @@ function App() {
                 )}
               </div>
 
-              {filterTasks(categorizedTasks.running).length > 0 && (
+              {(filterTasks(categorizedTasks.running).length > 0 || getActiveActivities().length > 0) && (
                 <section className="task-section running-section">
                   <div className="section-header">
                     <h2>
                       <i className="fas fa-play-circle"></i>
                       Running Now
                     </h2>
-                    <span className="task-count">{filterTasks(categorizedTasks.running).length}</span>
+                    <span className="task-count">{filterTasks(categorizedTasks.running).length + getActiveActivities().length}</span>
                   </div>
                   <div className="task-list">
+                    {/* Show active office/study activities */}
+                    {getActiveActivities().map(activity => (
+                      <ActivityCard
+                        key={activity.id}
+                        title={activity.title}
+                        startTime={activity.startTime}
+                        endTime={activity.endTime}
+                        icon={activity.icon}
+                        type={activity.type}
+                      />
+                    ))}
+                    {/* Show running tasks */}
                     {filterTasks(categorizedTasks.running).map(task => (
                       <TaskCard
                         key={task.id}
@@ -1287,6 +1707,7 @@ function App() {
                         onDelete={handleDeleteTask}
                         onEdit={handleEditTask}
                         onToggleLock={handleToggleLock}
+                        showStopwatch={true}
                       />
                     ))}
                   </div>

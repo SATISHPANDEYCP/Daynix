@@ -23,7 +23,8 @@ export const DEFAULT_PREFERENCES = {
   sleepTargetHours: 8,
   officeStartTime: null,
   officeEndTime: null,
-  studySlots: [], // Array of {start, end}
+  officeDays: [], // Array of day numbers: 0=Sunday, 1=Monday, ..., 6=Saturday
+  studySlots: [], // Array of {start, end, days: []}
   breakDuration: 15, // minutes
   breakFrequency: 120, // minutes (every 2 hours)
   theme: 'dark'
@@ -88,8 +89,7 @@ export const updatePreference = async (key, value) => {
 export const getSettings = async () => {
   const settings = await settingsStore.getItem('appSettings');
   return settings || {
-    autoBackup: false,
-    backupFrequency: 'weekly',
+    backupLocation: null,
     lastBackup: null
   };
 };
@@ -99,7 +99,7 @@ export const saveSettings = async (settings) => {
 };
 
 // Export/Import functionality
-export const exportData = async () => {
+export const exportData = async (returnData = false) => {
   const tasks = await getTasks();
   const preferences = await getPreferences();
   const settings = await getSettings();
@@ -112,7 +112,15 @@ export const exportData = async () => {
     version: '1.0'
   };
   
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const jsonString = JSON.stringify(data, null, 2);
+  
+  // If returnData is true, just return the JSON string for manual file operations
+  if (returnData) {
+    return jsonString;
+  }
+  
+  // Otherwise, trigger download
+  const blob = new Blob([jsonString], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -133,9 +141,36 @@ export const importData = async (file) => {
       try {
         const data = JSON.parse(e.target.result);
         
-        if (data.tasks) await saveTasks(data.tasks);
+        // Merge tasks instead of replacing
+        if (data.tasks) {
+          const existingTasks = await getTasks();
+          const backupTasks = data.tasks;
+          
+          // Create a map of existing task IDs
+          const existingIds = new Set(existingTasks.map(t => t.id));
+          
+          // Only add tasks from backup that don't already exist
+          const tasksToAdd = backupTasks.filter(t => !existingIds.has(t.id));
+          
+          // Merge: keep existing tasks + add non-duplicate tasks from backup
+          const mergedTasks = [...existingTasks, ...tasksToAdd];
+          await saveTasks(mergedTasks);
+        }
+        
+        // For preferences, restore from backup
         if (data.preferences) await savePreferences(data.preferences);
-        if (data.settings) await saveSettings(data.settings);
+        
+        // For settings, merge but keep current backup location
+        if (data.settings) {
+          const currentSettings = await getSettings();
+          const mergedSettings = {
+            ...data.settings,
+            // Preserve current backup location and handle (don't overwrite with backup's old location)
+            backupLocation: currentSettings.backupLocation || data.settings.backupLocation,
+            backupHandle: currentSettings.backupHandle // File handle cannot be serialized, keep current one
+          };
+          await saveSettings(mergedSettings);
+        }
         
         resolve(true);
       } catch (error) {

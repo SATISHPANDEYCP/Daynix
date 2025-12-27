@@ -244,21 +244,25 @@ export const formatTime = (timeStr) => {
 };
 
 // Get time until task
-export const getTimeUntil = (timeStr) => {
+export const getTimeUntil = (timeStr, dateStr) => {
   if (!timeStr) return null;
   
-  const current = getCurrentMinutes();
-  const target = timeToMinutes(timeStr);
+  const now = new Date();
+  const taskDateTime = new Date(dateStr + 'T' + timeStr);
+  const diffMs = taskDateTime.getTime() - now.getTime();
   
-  if (target === null) return null;
+  // If task is in the past
+  if (diffMs < 0) return 'Started';
   
-  const diff = target - current;
+  // If starting within a minute
+  if (diffMs < 60000) return 'Now';
   
-  if (diff < 0) return 'Started';
-  if (diff === 0) return 'Now';
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   
-  const hours = Math.floor(diff / 60);
-  const minutes = diff % 60;
+  // If more than 24 hours away, don't show countdown
+  if (hours >= 24) return null;
   
   if (hours > 0) {
     return `in ${hours}h ${minutes}m`;
