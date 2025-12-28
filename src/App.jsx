@@ -1809,42 +1809,45 @@ function App() {
                 </div>
               )}
 
-              {/* Preference section */}
+
+              {/* Preference section: Only show if user has at least one preference */}
               {preferences && (
-                <section className="task-section">
-                  <div className="section-header">
-                    <h2>
-                      <i className="fas fa-calendar-alt"></i>
-                      Your Saved Preferences
-                    </h2>
-                  </div>
+                (preferences.officeStartTime && preferences.officeEndTime) || (preferences.studySlots && preferences.studySlots.length > 0)
+              ) && (
+                  <section className="task-section">
+                    <div className="section-header">
+                      <h2>
+                        <i className="fas fa-calendar-alt"></i>
+                        Your Saved Preferences
+                      </h2>
+                    </div>
 
-                  <div className="task-list">
-                    {/* Office Hours */}
-                    {preferences.officeStartTime && preferences.officeEndTime && (
-                      <PreferenceCard
-                        title="Office Hours"
-                        startTime={preferences.officeStartTime}
-                        endTime={preferences.officeEndTime}
-                        days={preferences.officeDays}
-                        icon="briefcase"
-                      />
-                    )}
+                    <div className="task-list">
+                      {/* Office Hours */}
+                      {preferences.officeStartTime && preferences.officeEndTime && (
+                        <PreferenceCard
+                          title="Office Hours"
+                          startTime={preferences.officeStartTime}
+                          endTime={preferences.officeEndTime}
+                          days={preferences.officeDays}
+                          icon="briefcase"
+                        />
+                      )}
 
-                    {/* Study Slots */}
-                    {preferences.studySlots?.map((slot, index) => (
-                      <PreferenceCard
-                        key={index}
-                        title={`Study Slot ${index + 1}`}
-                        startTime={slot.start}
-                        endTime={slot.end}
-                        days={slot.days}
-                        icon="book"
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
+                      {/* Study Slots */}
+                      {preferences.studySlots?.map((slot, index) => (
+                        <PreferenceCard
+                          key={index}
+                          title={`Study Slot ${index + 1}`}
+                          startTime={slot.start}
+                          endTime={slot.end}
+                          days={slot.days}
+                          icon="book"
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
 
             </>
           )}
