@@ -347,12 +347,19 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
 
 // TaskForm Component
 const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => {
+  // Helper to get local date string (yyyy-mm-dd)
+  function getLocalDateString() {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().split('T')[0];
+  }
+
   const [task, setTask] = useState(initialTask || {
     title: '',
     description: '',
     type: TASK_TYPES.FLOATING,
-    date: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
+    endDate: getLocalDateString(),
     time: '',
     startTime: '',
     endTime: '',
