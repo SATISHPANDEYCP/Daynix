@@ -805,8 +805,10 @@ body.dark-mode .task-completed-time {
   }
 
   .install-btn {
-    width: 100%;
+    width: auto;
+    max-width: 180px;
     justify-content: center;
+    padding: 10px 20px;
   }
 }
 
@@ -1085,6 +1087,18 @@ body.dark-mode .overnight-badge {
   border: 1px solid rgba(91, 95, 233, 0.2);
 }
 
+.weekly-badge {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.recurring-instance-badge {
+  background: rgba(91, 95, 233, 0.1);
+  color: var(--primary-color);
+  border: 1px solid rgba(91, 95, 233, 0.2);
+}
+
 .locked-badge {
   background: #fff3e0;
   color: #f57c00;
@@ -1097,6 +1111,18 @@ body.dark-mode .overnight-badge {
 }
 
 body.dark-mode .daily-badge {
+  background: rgba(124, 131, 255, 0.15);
+  color: var(--primary-color);
+  border: 1px solid rgba(124, 131, 255, 0.3);
+}
+
+body.dark-mode .weekly-badge {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success-color);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+body.dark-mode .recurring-instance-badge {
   background: rgba(124, 131, 255, 0.15);
   color: var(--primary-color);
   border: 1px solid rgba(124, 131, 255, 0.3);
@@ -1763,8 +1789,10 @@ body.dark-mode .backup-location-display {
   }
 
   .install-btn {
-    width: 100%;
+    width: auto;
+    max-width: 180px;
     justify-content: center;
+    padding: 10px 20px;
   }
 
   /* Task Form Mobile */
@@ -1920,4 +1948,169 @@ body.dark-mode .install-btn.active:hover {
 
 body.dark-mode .section-header h2 i {
   filter: drop-shadow(0 0 6px rgba(124, 131, 255, 0.4));
+}
+
+/* Today's Tasks Table */
+.today-tasks-section {
+  margin-top: 24px;
+}
+
+.today-tasks-table {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.today-table-header {
+  display: grid;
+  grid-template-columns: 160px 1fr 150px;
+  gap: 16px;
+  padding: 12px 20px;
+  background: rgba(91, 95, 233, 0.05);
+  border-bottom: 2px solid var(--border-color);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+body.dark-mode .today-table-header {
+  background: rgba(124, 131, 255, 0.08);
+}
+
+.header-time {
+  text-align: left;
+}
+
+.header-task {
+  text-align: center;
+}
+
+.header-status {
+  text-align: right;
+}
+
+.today-task-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 150px;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.2s;
+}
+
+.today-task-row:last-child {
+  border-bottom: none;
+}
+
+.today-task-row:hover {
+  background: rgba(91, 95, 233, 0.04);
+}
+
+body.dark-mode .today-task-row:hover {
+  background: rgba(124, 131, 255, 0.05);
+}
+
+.today-task-row.completed {
+  opacity: 0.5;
+}
+
+.today-task-row.completed .today-task-center span {
+  text-decoration: line-through;
+}
+
+.today-task-row.time-passed {
+  opacity: 0.45;
+}
+
+.today-task-time {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  text-align: left;
+}
+
+.time-flexible {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.today-task-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.today-task-center i:first-child {
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+.completed-icon {
+  color: var(--success-color);
+  font-size: 0.9rem;
+  margin-left: 8px;
+}
+
+.today-task-right {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(91, 95, 233, 0.08);
+  color: var(--primary-color);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+body.dark-mode .meta-badge {
+  background: rgba(124, 131, 255, 0.12);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .today-table-header,
+  .today-task-row {
+    grid-template-columns: 90px 1fr 80px;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+
+  .today-table-header {
+    font-size: 0.75rem;
+  }
+
+  .today-task-time {
+    font-size: 0.8rem;
+  }
+
+  .today-task-center {
+    font-size: 0.9rem;
+    gap: 8px;
+  }
+  
+  .meta-badge {
+    font-size: 0.65rem;
+    padding: 3px 6px;
+  }
+  
+  .meta-badge i {
+    display: none;
+  }
 }

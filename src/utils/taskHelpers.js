@@ -214,12 +214,25 @@ export const autoMoveTask = (task) => {
 
 // Handle daily recurring tasks
 export const shouldCreateDailyInstance = (task) => {
-  if (!task.isDaily) return false;
+  // Legacy support: check isDaily or recurringType
+  const isRecurring = task.isDaily || task.recurringType === 'daily' || task.recurringType === 'weekly';
+  if (!isRecurring) return false;
 
-  const today = new Date().toDateString();
+  const today = new Date();
+  const todayStr = today.toDateString();
   const lastCreated = task.lastDailyInstance ? new Date(task.lastDailyInstance).toDateString() : null;
 
-  return lastCreated !== today;
+  // If already created today, don't create again
+  if (lastCreated === todayStr) return false;
+
+  // For weekly recurring tasks, check if today is one of the selected days
+  if (task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0) {
+    const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    return task.recurringDays.includes(currentDay);
+  }
+
+  // For daily recurring tasks, always create
+  return true;
 };
 
 export const createDailyInstance = (task) => {
@@ -229,7 +242,8 @@ export const createDailyInstance = (task) => {
     date: new Date().toISOString().split('T')[0],
     completed: false,
     parentTaskId: task.id,
-    isDaily: false // Instance is not daily, only parent is
+    isDaily: false, // Instance is not daily, only parent is
+    recurringType: 'none' // Instance is not recurring
   };
 };
 
