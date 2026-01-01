@@ -559,8 +559,14 @@ body.dark-mode .running-section .section-header {
 }
 
 .old-section .task-count {
-  background: var(--primary-color);
+  background: rgba(91, 95, 233, 0.1);
+  color: var(--primary-color);
   opacity: 0.8;
+}
+
+body.dark-mode .old-section .task-count {
+  background: rgba(124, 131, 255, 0.2);
+  color: var(--primary-color);
 }
 
 .completed-section .section-header {

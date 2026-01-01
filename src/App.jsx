@@ -337,12 +337,18 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
               Completed {getCompletionTime()}
             </span>
           ) : (
-            <span className="task-time">
-              <i className="fas fa-clock"></i>
-              {getTaskTimeDisplay()}
-            </span>
+            <>
+              {/* Hide time display for parent recurring tasks */}
+              {!((task.isDaily || task.recurringType === 'daily' || task.recurringType === 'weekly') && !task.parentTaskId) && (
+                <span className="task-time">
+                  <i className="fas fa-clock"></i>
+                  {getTaskTimeDisplay()}
+                </span>
+              )}
+            </>
           )}
-          {task.date && (
+          {/* Hide date for parent recurring tasks */}
+          {task.date && !((task.isDaily || task.recurringType === 'daily' || task.recurringType === 'weekly') && !task.parentTaskId) && (
             <span className="task-date">
               <i className="fas fa-calendar"></i>
               {task.endDate && task.endDate !== task.date ? (
@@ -367,7 +373,8 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
           )}
         </div>
 
-        {!task.completed && (
+        {/* Hide complete button for parent recurring tasks */}
+        {!task.completed && !((task.isDaily || task.recurringType === 'daily' || task.recurringType === 'weekly') && !task.parentTaskId) && (
           <>
             {!isCompleting ? (
               <button
@@ -544,14 +551,17 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => 
           </select>
         </div>
 
-        <div className="form-group">
-          <label>Date</label>
-          <input
-            type="date"
-            value={task.date}
-            onChange={e => handleChange('date', e.target.value)}
-          />
-        </div>
+        {/* Hide date field for recurring tasks */}
+        {!task.recurringType || task.recurringType === 'none' ? (
+          <div className="form-group">
+            <label>Date</label>
+            <input
+              type="date"
+              value={task.date}
+              onChange={e => handleChange('date', e.target.value)}
+            />
+          </div>
+        ) : null}
       </div>
 
       {task.type === TASK_TYPES.TIME_BOUND && (
