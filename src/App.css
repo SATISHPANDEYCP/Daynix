@@ -334,7 +334,13 @@ body.dark-mode .task-count {
 }
 
 .running-section .task-count {
-  background: var(--primary-color);
+  background: rgba(91, 95, 233, 0.1);
+  color: var(--primary-color);
+}
+
+body.dark-mode .running-section .task-count {
+  background: rgba(124, 131, 255, 0.2);
+  color: var(--primary-color);
 }
 
 /* Enhanced Main Screen Card Styles */
@@ -558,15 +564,15 @@ body.dark-mode .running-section .section-header {
 }
 
 .completed-section .section-header {
-  background: linear-gradient(135deg, rgba(124, 131, 255, 0.1) 0%, transparent 100%);
-  padding: 12px 16px;
-  border-radius: 12px;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
   margin-bottom: 16px;
-  border-left: 4px solid var(--primary-color);
+  border-left: none;
 }
 
 body.dark-mode .completed-section .section-header {
-  background: linear-gradient(135deg, rgba(124, 131, 255, 0.08) 0%, transparent 100%);
+  background: transparent;
 }
 
 .completed-section .section-header h2 {
@@ -582,8 +588,13 @@ body.dark-mode .completed-section .section-header {
 }
 
 .completed-section .task-count {
-  background: var(--primary-color);
-  box-shadow: 0 2px 8px rgba(91, 95, 233, 0.3);
+  background: rgba(91, 95, 233, 0.1);
+  color: var(--primary-color);
+}
+
+body.dark-mode .completed-section .task-count {
+  background: rgba(124, 131, 255, 0.2);
+  color: var(--primary-color);
 }
 
 /* Completed Task Card Styles */
@@ -784,8 +795,17 @@ body.dark-mode .task-completed-time {
   }
 
   .section-header {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  
+  .section-header h2 {
+    flex: 0 1 auto;
+  }
+  
+  .task-count {
+    flex-shrink: 0;
   }
 
   .move-tasks-btn {
@@ -1768,8 +1788,17 @@ body.dark-mode .backup-location-display {
   }
 
   .section-header {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  
+  .section-header h2 {
+    flex: 0 1 auto;
+  }
+  
+  .task-count {
+    flex-shrink: 0;
   }
 
   .move-tasks-btn {
@@ -2115,6 +2144,18 @@ body.dark-mode .meta-badge {
   }
   
   .today-tasks-section .task-count {
+    width: 22px;
+    height: 22px;
+    font-size: 0.75rem;
+  }
+  
+  .running-section .section-header {
+    flex-direction: row;
+    align-items: center;
+  }
+  
+  .running-section .task-count {
+    margin-left: 8px;
     width: 22px;
     height: 22px;
     font-size: 0.75rem;
