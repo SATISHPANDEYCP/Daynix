@@ -1065,8 +1065,10 @@ const SettingsModal = ({ isOpen, onClose }) => {
   }, [isOpen]);
 
   const loadSettings = async () => {
+    const { getSettings, getBackupHandle } = await import('./utils/storage');
     const appSettings = await getSettings();
-    setSettings(appSettings);
+    const handle = await getBackupHandle();
+    setSettings({ ...appSettings, backupHandle: handle });
     setBackupLocation(appSettings.backupLocation || null);
   };
 
@@ -1077,11 +1079,11 @@ const SettingsModal = ({ isOpen, onClose }) => {
         const dirHandle = await window.showDirectoryPicker();
         const newSettings = {
           ...settings,
-          backupLocation: dirHandle.name
-          // Note: backupHandle is stored in state only, not in IndexedDB (can't be serialized)
+          backupLocation: dirHandle.name,
+          backupHandle: dirHandle
         };
-        setSettings({ ...newSettings, backupHandle: dirHandle });
-        await saveSettings(newSettings); // Save without backupHandle
+        setSettings(newSettings);
+        await saveSettings(newSettings); // Now saves handle properly
         setBackupLocation(dirHandle.name);
         toast.success('Backup location set: ' + dirHandle.name);
       } else {
@@ -1105,9 +1107,11 @@ const SettingsModal = ({ isOpen, onClose }) => {
 
   const handleForgetLocation = async () => {
     if (window.confirm('Forget backup location preference?')) {
+      const { clearBackupHandle } = await import('./utils/storage');
       const newSettings = { ...settings, backupLocation: null, backupHandle: null };
       setSettings(newSettings);
       await saveSettings(newSettings);
+      await clearBackupHandle();
       setBackupLocation(null);
       toast.info('Backup location forgotten');
     }
@@ -2216,15 +2220,84 @@ function App() {
                     </div>
                     <div className="task-list">
                       {recurringParentTasks.map(task => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          onComplete={handleCompleteTask}
-                          onDelete={handleDeleteTask}
-                          onEdit={handleEditTask}
-                          onToggleLock={handleToggleLock}
-                          allTasks={tasks}
-                        />
+                        <div key={task.id} className="task-card preference-card">
+                          <div className="task-card-header">
+                            <div className="task-title-section">
+                              <h3 className="task-title">{task.title}</h3>
+                              {task.recurringType === 'daily' && (
+                                <span className="task-badge daily-badge">
+                                  <i className="fas fa-redo"></i> Daily
+                                </span>
+                              )}
+                              {task.recurringType === 'weekly' && (
+                                <span className="task-badge weekly-badge">
+                                  <i className="fas fa-calendar-week"></i> Weekly
+                                </span>
+                              )}
+                            </div>
+                            <div className="task-actions">
+                              <button
+                                className="task-action-btn"
+                                onClick={() => handleToggleLock(task.id)}
+                                title={task.locked ? 'Unlock task' : 'Lock task'}
+                              >
+                                <i className={`fas fa-${task.locked ? 'lock' : 'lock-open'}`}></i>
+                              </button>
+                              <button
+                                className="task-action-btn"
+                                onClick={() => handleEditTask(task)}
+                                title="Edit task"
+                                disabled={task.locked}
+                                style={{ opacity: task.locked ? 0.5 : 1, cursor: task.locked ? 'not-allowed' : 'pointer' }}
+                              >
+                                <i className="fas fa-edit"></i>
+                              </button>
+                              <button
+                                className="task-action-btn delete-btn"
+                                onClick={() => {
+                                  if (task.locked) {
+                                    toast.info('Unlock the task first to delete it');
+                                    return;
+                                  }
+                                  if (window.confirm('Delete this task?')) {
+                                    handleDeleteTask(task.id);
+                                    toast.info('Task removed');
+                                  }
+                                }}
+                                title="Delete task"
+                                disabled={task.locked}
+                                style={{ opacity: task.locked ? 0.5 : 1, cursor: task.locked ? 'not-allowed' : 'pointer' }}
+                              >
+                                <i className="fas fa-trash"></i>
+                              </button>
+                            </div>
+                          </div>
+
+                          {task.description && (
+                            <p className="task-description">{task.description}</p>
+                          )}
+
+                          {task.type === TASK_TYPES.TIME_RANGE && (
+                            <div className="task-description">
+                              <i className="fas fa-clock"></i>{' '}
+                              {formatTime(task.startTime)} – {formatTime(task.endTime)}
+                            </div>
+                          )}
+
+                          {task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0 && (
+                            <div className="days-selector" style={{ marginTop: '12px' }}>
+                              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                                <span
+                                  key={index}
+                                  className={`day-btn ${task.recurringDays.includes(index) ? 'active' : ''}`}
+                                  style={{ cursor: 'default' }}
+                                >
+                                  {day}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </section>

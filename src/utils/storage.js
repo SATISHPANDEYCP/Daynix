@@ -90,12 +90,28 @@ export const getSettings = async () => {
   const settings = await settingsStore.getItem('appSettings');
   return settings || {
     backupLocation: null,
+    backupHandle: null,
     lastBackup: null
   };
 };
 
 export const saveSettings = async (settings) => {
-  await settingsStore.setItem('appSettings', settings);
+  // Store the directory handle separately using IndexedDB's native support
+  const { backupHandle, ...otherSettings } = settings;
+  await settingsStore.setItem('appSettings', otherSettings);
+  
+  // Store handle separately if it exists
+  if (backupHandle) {
+    await settingsStore.setItem('backupHandle', backupHandle);
+  }
+};
+
+export const getBackupHandle = async () => {
+  return await settingsStore.getItem('backupHandle');
+};
+
+export const clearBackupHandle = async () => {
+  await settingsStore.removeItem('backupHandle');
 };
 
 // Export/Import functionality
