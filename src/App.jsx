@@ -179,6 +179,10 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
   }, [undoTimer]);
 
   const handleDelete = () => {
+    if (task.locked) {
+      toast.info('Unlock the task first to delete it');
+      return;
+    }
     if (window.confirm('Delete this task?')) {
       onDelete(task.id);
       toast.info('Task removed');
@@ -190,9 +194,12 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
       return 'Anytime';
     }
 
+    // Check if this is a parent recurring task (not an instance)
+    const isParentRecurring = (task.isDaily || task.recurringType === 'daily' || task.recurringType === 'weekly') && !task.parentTaskId;
+
     if (task.type === TASK_TYPES.TIME_BOUND) {
-      // For completed tasks, don't show countdown
-      const timeUntil = task.completed ? null : getTimeUntil(task.time, task.date);
+      // For completed tasks or parent recurring tasks, don't show countdown
+      const timeUntil = (task.completed || isParentRecurring) ? null : getTimeUntil(task.time, task.date);
       return (
         <span className="time-display">
           {formatTime(task.time)}
@@ -202,8 +209,8 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
     }
 
     if (task.type === TASK_TYPES.TIME_RANGE) {
-      // For completed tasks, don't show countdown
-      const timeUntil = task.completed ? null : getTimeUntil(task.startTime, task.date);
+      // For completed tasks or parent recurring tasks, don't show countdown
+      const timeUntil = (task.completed || isParentRecurring) ? null : getTimeUntil(task.startTime, task.date);
       return (
         <span className="time-display">
           {formatTime(task.startTime)} - {formatTime(task.endTime)}
@@ -273,6 +280,8 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
             className="task-action-btn"
             onClick={() => onEdit(task)}
             title="Edit task"
+            disabled={task.locked}
+            style={{ opacity: task.locked ? 0.5 : 1, cursor: task.locked ? 'not-allowed' : 'pointer' }}
           >
             <i className="fas fa-edit"></i>
           </button>
@@ -280,6 +289,8 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
             className="task-action-btn delete-btn"
             onClick={handleDelete}
             title="Delete task"
+            disabled={task.locked}
+            style={{ opacity: task.locked ? 0.5 : 1, cursor: task.locked ? 'not-allowed' : 'pointer' }}
           >
             <i className="fas fa-trash"></i>
           </button>
@@ -338,8 +349,8 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
             </span>
           ) : (
             <>
-              {/* Hide time display for parent recurring tasks */}
-              {!((task.isDaily || task.recurringType === 'daily' || task.recurringType === 'weekly') && !task.parentTaskId) && (
+              {/* Show time for time range tasks, or non-recurring tasks, or instance tasks */}
+              {(task.type === TASK_TYPES.TIME_RANGE || task.parentTaskId || !((task.isDaily || task.recurringType === 'daily' || task.recurringType === 'weekly') && !task.parentTaskId)) && (
                 <span className="task-time">
                   <i className="fas fa-clock"></i>
                   {getTaskTimeDisplay()}
@@ -551,18 +562,64 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => 
           </select>
         </div>
 
-        {/* Hide date field for recurring tasks */}
-        {!task.recurringType || task.recurringType === 'none' ? (
-          <div className="form-group">
-            <label>Date</label>
-            <input
-              type="date"
-              value={task.date}
-              onChange={e => handleChange('date', e.target.value)}
-            />
-          </div>
-        ) : null}
+        <div className="form-group">
+          <label>Repeat</label>
+          <select
+            value={task.recurringType || 'none'}
+            onChange={e => {
+              const newType = e.target.value;
+              handleChange('recurringType', newType);
+              // Legacy support: sync isDaily
+              handleChange('isDaily', newType === 'daily');
+              // If changing to weekly, initialize with current day
+              if (newType === 'weekly' && (!task.recurringDays || task.recurringDays.length === 0)) {
+                const currentDay = new Date(task.date).getDay();
+                handleChange('recurringDays', [currentDay]);
+              }
+            }}
+          >
+            <option value="none">No repeat</option>
+            <option value="daily">Every day</option>
+            <option value="weekly">Specific days</option>
+          </select>
+        </div>
       </div>
+
+      {task.recurringType === 'weekly' && (
+        <div className="form-group">
+          <label>Repeat on</label>
+          <div className="days-selector">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+              <button
+                key={index}
+                type="button"
+                className={`day-btn ${(task.recurringDays || []).includes(index) ? 'active' : ''}`}
+                onClick={() => {
+                  const days = task.recurringDays || [];
+                  const newDays = days.includes(index)
+                    ? days.filter(d => d !== index)
+                    : [...days, index].sort();
+                  handleChange('recurringDays', newDays);
+                }}
+              >
+                {day}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Hide date field for recurring tasks */}
+      {!task.recurringType || task.recurringType === 'none' ? (
+        <div className="form-group">
+          <label>Date</label>
+          <input
+            type="date"
+            value={task.date}
+            onChange={e => handleChange('date', e.target.value)}
+          />
+        </div>
+      ) : null}
 
       {task.type === TASK_TYPES.TIME_BOUND && (
         <div className="form-group">
@@ -579,7 +636,7 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => 
         <>
           <div className="form-row">
             <div className="form-group">
-              <label>Start Date</label>
+              <label>{task.recurringType && task.recurringType !== 'none' ? 'Pattern Start Date' : 'Start Date'}</label>
               <input
                 type="date"
                 value={task.date}
@@ -587,7 +644,7 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => 
               />
             </div>
             <div className="form-group">
-              <label>End Date</label>
+              <label>{task.recurringType && task.recurringType !== 'none' ? 'Pattern End Date' : 'End Date'}</label>
               <input
                 type="date"
                 value={task.endDate || task.date}
@@ -628,52 +685,6 @@ const TaskForm = ({ onSubmit, onCancel, initialTask = null, allTasks = [] }) => 
             <i className="fas fa-lock"></i> Lock task (won't auto-move)
           </span>
         </label>
-
-        <div className="form-group" style={{ marginTop: '12px' }}>
-          <label>Repeat</label>
-          <select
-            value={task.recurringType || 'none'}
-            onChange={e => {
-              const newType = e.target.value;
-              handleChange('recurringType', newType);
-              // Legacy support: sync isDaily
-              handleChange('isDaily', newType === 'daily');
-              // If changing to weekly, initialize with current day
-              if (newType === 'weekly' && (!task.recurringDays || task.recurringDays.length === 0)) {
-                const currentDay = new Date(task.date).getDay();
-                handleChange('recurringDays', [currentDay]);
-              }
-            }}
-          >
-            <option value="none">No repeat</option>
-            <option value="daily">Every day</option>
-            <option value="weekly">Specific days</option>
-          </select>
-        </div>
-
-        {task.recurringType === 'weekly' && (
-          <div className="form-group" style={{ marginTop: '12px' }}>
-            <label>Repeat on</label>
-            <div className="days-selector">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  className={`day-btn ${(task.recurringDays || []).includes(index) ? 'active' : ''}`}
-                  onClick={() => {
-                    const days = task.recurringDays || [];
-                    const newDays = days.includes(index)
-                      ? days.filter(d => d !== index)
-                      : [...days, index].sort();
-                    handleChange('recurringDays', newDays);
-                  }}
-                >
-                  {day}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="form-actions">
@@ -1554,6 +1565,10 @@ function App() {
   };
 
   const handleEditTask = (task) => {
+    if (task.locked) {
+      toast.info('Unlock the task first to edit it');
+      return;
+    }
     setEditingTask(task);
     setShowTaskForm(true);
     setCurrentView('tasks'); // Switch to All Tasks view
