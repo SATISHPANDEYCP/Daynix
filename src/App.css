@@ -2113,4 +2113,10 @@ body.dark-mode .meta-badge {
   .meta-badge i {
     display: none;
   }
+  
+  .today-tasks-section .task-count {
+    width: 22px;
+    height: 22px;
+    font-size: 0.75rem;
+  }
 }

@@ -1725,7 +1725,8 @@ function App() {
                           title: 'Office Hours',
                           startTime: preferences.officeStartTime,
                           endTime: preferences.officeEndTime,
-                          icon: 'briefcase'
+                          icon: 'briefcase',
+                          isRecurring: officeDays.length > 1
                         });
                       }
                     }
@@ -1741,7 +1742,8 @@ function App() {
                             title: 'Study Time',
                             startTime: slot.start,
                             endTime: slot.end,
-                            icon: 'book'
+                            icon: 'book',
+                            isRecurring: slotDays.length > 1
                           });
                         }
                       });
@@ -1813,7 +1815,7 @@ function App() {
                                   <span>{item.title}</span>
                                 </div>
                                 <div className="today-task-right">
-                                  {item.parentTaskId && (
+                                  {(item.parentTaskId || item.isRecurring) && (
                                     <span className="meta-badge">
                                       <i className="fas fa-sync-alt"></i> Recurring
                                     </span>
@@ -1869,7 +1871,8 @@ function App() {
                           title: 'Office Hours',
                           startTime: preferences.officeStartTime,
                           endTime: preferences.officeEndTime,
-                          icon: 'briefcase'
+                          icon: 'briefcase',
+                          isRecurring: officeDays.length > 1
                         });
                       }
                     }
@@ -1885,7 +1888,8 @@ function App() {
                             title: 'Study Time',
                             startTime: slot.start,
                             endTime: slot.end,
-                            icon: 'book'
+                            icon: 'book',
+                            isRecurring: slotDays.length > 1
                           });
                         }
                       });
@@ -1940,8 +1944,6 @@ function App() {
                               <div 
                                 key={item.id || `activity-${item.type}-${index}`} 
                                 className={`today-task-row ${timePassed || item.completed ? 'time-passed' : ''}`}
-                                onClick={() => item.id ? handleEditTask(item) : null}
-                                style={{ cursor: item.id ? 'pointer' : 'default' }}
                               >
                                 <div className="today-task-time">
                                   {item.type === TASK_TYPES.FLOATING ? (
@@ -1957,7 +1959,7 @@ function App() {
                                   <span>{item.title}</span>
                                 </div>
                                 <div className="today-task-right">
-                                  {item.parentTaskId && (
+                                  {(item.parentTaskId || item.isRecurring) && (
                                     <span className="meta-badge">
                                       <i className="fas fa-sync-alt"></i> Recurring
                                     </span>
@@ -2168,6 +2170,41 @@ function App() {
                 </div>
               )}
 
+
+              {/* Recurring Tasks Section - Show parent recurring tasks */}
+              {(() => {
+                const recurringParentTasks = tasks.filter(t => 
+                  (t.isDaily || t.recurringType === 'daily' || t.recurringType === 'weekly') && 
+                  !t.parentTaskId
+                );
+                
+                if (recurringParentTasks.length === 0) return null;
+                
+                return (
+                  <section className="task-section">
+                    <div className="section-header">
+                      <h2>
+                        <i className="fas fa-sync-alt"></i>
+                        Scheduled Recurring Tasks
+                      </h2>
+                      <span className="task-count">{recurringParentTasks.length}</span>
+                    </div>
+                    <div className="task-list">
+                      {recurringParentTasks.map(task => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onComplete={handleCompleteTask}
+                          onDelete={handleDeleteTask}
+                          onEdit={handleEditTask}
+                          onToggleLock={handleToggleLock}
+                          allTasks={tasks}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })()}
 
               {/* Preference section: Only show if user has at least one preference */}
               {preferences && (
