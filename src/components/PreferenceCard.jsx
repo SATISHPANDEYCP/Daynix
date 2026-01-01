@@ -19,7 +19,7 @@ const PreferenceCard = ({ title, startTime, endTime, days, icon }) => {
       </div>
 
       {Array.isArray(days) && days.length > 0 && (
-        <div className="days-selector" style={{ marginTop: '12px' }}>
+        <div className="days-selector">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
             <span
               key={index}

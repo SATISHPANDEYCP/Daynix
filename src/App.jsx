@@ -306,12 +306,12 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
         const parentTask = allTasks.find(t => t.id === task.parentTaskId);
         if (parentTask && parentTask.recurringType === 'weekly' && parentTask.recurringDays && parentTask.recurringDays.length > 0) {
           return (
-            <div className="days-selector" style={{ marginTop: '12px', marginBottom: '8px' }}>
+            <div className="days-selector">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
                 <span
                   key={index}
                   className={`day-btn ${parentTask.recurringDays.includes(index) ? 'active' : ''}`}
-                  style={{ cursor: 'default', fontSize: '0.85rem', padding: '4px 8px' }}
+                  style={{ cursor: 'default' }}
                 >
                   {day}
                 </span>
@@ -323,12 +323,12 @@ const TaskCard = ({ task, onComplete, onDelete, onEdit, onToggleLock, showStopwa
       })()}
 
       {task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0 && !task.parentTaskId && (
-        <div className="days-selector" style={{ marginTop: '12px', marginBottom: '8px' }}>
+        <div className="days-selector">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
             <span
               key={index}
               className={`day-btn ${task.recurringDays.includes(index) ? 'active' : ''}`}
-              style={{ cursor: 'default', fontSize: '0.85rem', padding: '4px 8px' }}
+              style={{ cursor: 'default' }}
             >
               {day}
             </span>
@@ -2285,7 +2285,7 @@ function App() {
                           )}
 
                           {task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0 && (
-                            <div className="days-selector" style={{ marginTop: '12px' }}>
+                            <div className="days-selector">
                               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
                                 <span
                                   key={index}

@@ -644,8 +644,8 @@ body.dark-mode .completed-section .task-count {
 .completed-badge {
   background: linear-gradient(135deg, var(--primary-color), #5b5fe9);
   color: white;
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
   display: inline-flex;
@@ -1101,68 +1101,89 @@ body.dark-mode .overnight-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .daily-badge {
   background: rgba(91, 95, 233, 0.1);
   color: var(--primary-color);
   border: 1px solid rgba(91, 95, 233, 0.2);
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 .weekly-badge {
   background: rgba(34, 197, 94, 0.1);
   color: #16a34a;
   border: 1px solid rgba(34, 197, 94, 0.2);
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 .recurring-instance-badge {
   background: rgba(91, 95, 233, 0.1);
   color: var(--primary-color);
   border: 1px solid rgba(91, 95, 233, 0.2);
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 .locked-badge {
   background: #fff3e0;
   color: #f57c00;
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 .moved-badge {
   background: rgba(91, 95, 233, 0.1);
   color: var(--primary-color);
   border: 1px solid rgba(91, 95, 233, 0.2);
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 body.dark-mode .daily-badge {
   background: rgba(124, 131, 255, 0.15);
   color: var(--primary-color);
   border: 1px solid rgba(124, 131, 255, 0.3);
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 body.dark-mode .weekly-badge {
   background: rgba(34, 197, 94, 0.15);
   color: var(--success-color);
   border: 1px solid rgba(34, 197, 94, 0.3);
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 body.dark-mode .recurring-instance-badge {
   background: rgba(124, 131, 255, 0.15);
   color: var(--primary-color);
   border: 1px solid rgba(124, 131, 255, 0.3);
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 body.dark-mode .locked-badge {
   background: #e65100;
   color: #fff3e0;
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 body.dark-mode .moved-badge {
   background: rgba(124, 131, 255, 0.15);
   color: var(--primary-color);
   border: 1px solid rgba(124, 131, 255, 0.3);
+  font-size: 0.75rem;
+  padding: 3px 10px;
 }
 
 .task-actions {
@@ -1432,34 +1453,67 @@ body.dark-mode .moved-badge {
 /* Day Selector */
 .days-selector {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin-top: 12px;
 }
 
 .day-btn {
   flex: 1;
-  min-width: 45px;
-  padding: 8px 12px;
+  min-width: 40px;
+  padding: 6px 10px;
   background: var(--bg-secondary);
   border: 2px solid var(--border-color);
   border-radius: 8px;
   cursor: pointer;
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   transition: all 0.2s;
+  text-align: center;
 }
 
 .day-btn:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
+  background: rgba(91, 95, 233, 0.05);
 }
 
 .day-btn.active {
   background: var(--primary-color);
   border-color: var(--primary-color);
   color: white;
+  box-shadow: 0 2px 4px rgba(91, 95, 233, 0.3);
+}
+
+/* Form day buttons (interactive) */
+button.day-btn {
+  cursor: pointer;
+}
+
+button.day-btn:active {
+  transform: scale(0.95);
+}
+
+/* Read-only day buttons (in task cards) */
+span.day-btn {
+  cursor: default;
+}
+
+body.dark-mode .day-btn {
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+}
+
+body.dark-mode .day-btn:hover {
+  background: rgba(124, 131, 255, 0.1);
+  border-color: var(--primary-color);
+}
+
+body.dark-mode .day-btn.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 6px rgba(124, 131, 255, 0.4);
 }
 
 .study-slot-container {
@@ -1848,6 +1902,19 @@ body.dark-mode .backup-location-display {
   .task-card-header {
     flex-direction: column;
     gap: 8px;
+  }
+
+  /* Days selector mobile optimization */
+  .days-selector {
+    gap: 4px;
+    margin-top: 10px;
+  }
+
+  .day-btn {
+    min-width: 36px;
+    padding: 5px 8px;
+    font-size: 0.75rem;
+    border-radius: 6px;
   }
 
   .task-actions {
