@@ -1314,6 +1314,13 @@ const SettingsModal = ({ isOpen, onClose }) => {
 
 // Main App Component
 function App() {
+  // Helper to get local date string (yyyy-mm-dd) - handles timezone properly
+  const getLocalDateString = (date = new Date()) => {
+    const d = new Date(date);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().split('T')[0];
+  };
+
   const [tasks, setTasks] = useState([]);
   const [categorizedTasks, setCategorizedTasks] = useState({
     running: [],
@@ -1498,6 +1505,63 @@ function App() {
     }
 
     return activities;
+  };
+
+  const getTodaysSchedule = () => {
+    if (!preferences) return { tasks: [], activities: [], allItems: [] };
+
+    const today = getLocalDateString();
+    const currentDay = new Date().getDay();
+    
+    // Get all tasks for today from all categories (running, upcoming, old, completed)
+    const todaysTasks = [...categorizedTasks.running, ...categorizedTasks.upcoming, ...categorizedTasks.old, ...categorizedTasks.completed]
+      .filter(t => t.date === today);
+    
+    // Get all activities scheduled for today
+    const todaysActivities = [];
+    
+    // Add office if scheduled today
+    if (preferences.officeStartTime && preferences.officeEndTime) {
+      const officeDays = preferences.officeDays || [];
+      if (officeDays.includes(currentDay)) {
+        todaysActivities.push({
+          type: 'office',
+          title: 'Office Hours',
+          startTime: preferences.officeStartTime,
+          endTime: preferences.officeEndTime,
+          icon: 'briefcase',
+          isRecurring: officeDays.length > 1
+        });
+      }
+    }
+    
+    // Add study slots if scheduled today
+    if (preferences.studySlots && preferences.studySlots.length > 0) {
+      preferences.studySlots.forEach(slot => {
+        const slotDays = slot.days || [];
+        if (slotDays.includes(currentDay)) {
+          todaysActivities.push({
+            type: 'study',
+            title: 'Study Time',
+            startTime: slot.start,
+            endTime: slot.end,
+            icon: 'book',
+            isRecurring: slotDays.length > 1
+          });
+        }
+      });
+    }
+    
+    const allItems = [...todaysTasks, ...todaysActivities];
+    
+    // Sort by time
+    allItems.sort((a, b) => {
+      const timeA = a.startTime || a.time || '99:99';
+      const timeB = b.startTime || b.time || '99:99';
+      return timeA.localeCompare(timeB);
+    });
+    
+    return { tasks: todaysTasks, activities: todaysActivities, allItems };
   };
 
   const handleDailyTasks = async () => {
@@ -1697,136 +1761,115 @@ function App() {
           {/* MAIN VIEW - Only Running or Next Upcoming */}
           {currentView === 'main' && (
             <>
-              {(categorizedTasks.running.length > 0 || getActiveActivities().length > 0) ? (
-                <>
-                  <section className="task-section running-section">
-                    <div className="section-header">
-                      <h2>
-                        <i className="fas fa-play-circle"></i>
-                        Running Now
-                      </h2>
-                      <span className="task-count">{categorizedTasks.running.length + getActiveActivities().length}</span>
-                    </div>
-                    <div className="task-list">
-                      {/* Show active office/study activities */}
-                      {getActiveActivities().map(activity => (
-                        <ActivityCard
-                          key={activity.id}
-                          title={activity.title}
-                          startTime={activity.startTime}
-                          endTime={activity.endTime}
-                          icon={activity.icon}
-                          type={activity.type}
-                        />
-                      ))}
-                      {/* Show running tasks */}
-                      {categorizedTasks.running.map(task => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          onComplete={handleCompleteTask}
-                          onDelete={handleDeleteTask}
-                          onEdit={handleEditTask}
-                          onToggleLock={handleToggleLock}
-                          showStopwatch={true}
-                          allTasks={tasks}
-                        />
-                      ))}
-                    </div>
-                  </section>
+              {/* Always show today's schedule table if there are items */}
+              {(() => {
+                const todaysSchedule = getTodaysSchedule();
+                const hasRunningItems = categorizedTasks.running.length > 0 || getActiveActivities().length > 0;
+                
+                return (
+                  <>
+                    {/* Show running section if there are running items */}
+                    {hasRunningItems && (
+                      <section className="task-section running-section">
+                        <div className="section-header">
+                          <h2>
+                            <i className="fas fa-play-circle"></i>
+                            Running Now
+                          </h2>
+                          <span className="task-count">{categorizedTasks.running.length + getActiveActivities().length}</span>
+                        </div>
+                        <div className="task-list">
+                          {/* Show active office/study activities */}
+                          {getActiveActivities().map(activity => (
+                            <ActivityCard
+                              key={activity.id}
+                              title={activity.title}
+                              startTime={activity.startTime}
+                              endTime={activity.endTime}
+                              icon={activity.icon}
+                              type={activity.type}
+                            />
+                          ))}
+                          {/* Show running tasks */}
+                          {categorizedTasks.running.map(task => (
+                            <TaskCard
+                              key={task.id}
+                              task={task}
+                              onComplete={handleCompleteTask}
+                              onDelete={handleDeleteTask}
+                              onEdit={handleEditTask}
+                              onToggleLock={handleToggleLock}
+                              showStopwatch={true}
+                              allTasks={tasks}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    )}
 
-                  {/* Today's Tasks Table - Shows below running tasks */}
-                  {(() => {
-                    const today = new Date().toISOString().split('T')[0];
-                    const todaysTasks = [...categorizedTasks.upcoming, ...categorizedTasks.old, ...categorizedTasks.completed]
-                      .filter(t => t.date === today);
-                    
-                    // Get all activities for today
-                    const todaysActivities = [];
-                    
-                    // Add office if scheduled today
-                    if (preferences.officeStartTime && preferences.officeEndTime) {
-                      const currentDay = new Date().getDay();
-                      const officeDays = preferences.officeDays || [];
-                      if (officeDays.includes(currentDay)) {
-                        todaysActivities.push({
-                          type: 'office',
-                          title: 'Office Hours',
-                          startTime: preferences.officeStartTime,
-                          endTime: preferences.officeEndTime,
-                          icon: 'briefcase',
-                          isRecurring: officeDays.length > 1
-                        });
-                      }
-                    }
-                    
-                    // Add study slots if scheduled today
-                    if (preferences.studySlots && preferences.studySlots.length > 0) {
-                      const currentDay = new Date().getDay();
-                      preferences.studySlots.forEach(slot => {
-                        const slotDays = slot.days || [];
-                        if (slotDays.includes(currentDay)) {
-                          todaysActivities.push({
-                            type: 'study',
-                            title: 'Study Time',
-                            startTime: slot.start,
-                            endTime: slot.end,
-                            icon: 'book',
-                            isRecurring: slotDays.length > 1
-                          });
-                        }
-                      });
-                    }
-                    
-                    const allTodaysItems = [...todaysTasks, ...todaysActivities];
-                    
-                    if (allTodaysItems.length > 0) {
-                      // Sort by time
-                      const sortedItems = allTodaysItems.sort((a, b) => {
-                        const timeA = a.startTime || a.time || '99:99';
-                        const timeB = b.startTime || b.time || '99:99';
-                        return timeA.localeCompare(timeB);
-                      });
-                      
-                      return (
-                        <section className="task-section today-tasks-section">
-                          <div className="section-header">
-                            <h2>
-                              <i className="fas fa-calendar-day"></i>
-                              Today's Schedule
-                            </h2>
-                            <span className="task-count">{sortedItems.length}</span>
+                    {/* Show next up card only if no running items but there are upcoming tasks */}
+                    {!hasRunningItems && categorizedTasks.upcoming.length > 0 && (
+                      <section className="task-section">
+                        <div className="section-header">
+                          <h2>
+                            <i className="fas fa-clock"></i>
+                            Next Up
+                          </h2>
+                        </div>
+                        <div className="task-list">
+                          <TaskCard
+                            key={categorizedTasks.upcoming[0].id}
+                            task={categorizedTasks.upcoming[0]}
+                            onComplete={handleCompleteTask}
+                            onDelete={handleDeleteTask}
+                            onEdit={handleEditTask}
+                            onToggleLock={handleToggleLock}
+                            allTasks={tasks}
+                          />
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Today's Schedule Table - Always show if there are items for today */}
+                    {todaysSchedule.allItems.length > 0 && (
+                      <section className="task-section today-tasks-section">
+                        <div className="section-header">
+                          <h2>
+                            <i className="fas fa-calendar-day"></i>
+                            Today's Schedule
+                          </h2>
+                          <span className="task-count">{todaysSchedule.allItems.length}</span>
+                        </div>
+                        <div className="today-tasks-table">
+                          <div className="today-table-header">
+                            <div className="header-time">Time</div>
+                            <div className="header-task">Task</div>
+                            <div className="header-status">Status</div>
                           </div>
-                          <div className="today-tasks-table">
-                            <div className="today-table-header">
-                              <div className="header-time">Time</div>
-                              <div className="header-task">Task</div>
-                              <div className="header-status">Status</div>
-                            </div>
-                            {sortedItems.map((item, index) => {
-                              // Check if time has passed
-                              const now = new Date();
-                              const currentTime = now.getHours() * 60 + now.getMinutes();
-                              let timePassed = false;
-                              
-                              if (item.type === TASK_TYPES.TIME_BOUND && item.time) {
-                                const [hours, minutes] = item.time.split(':').map(Number);
-                                const taskTime = hours * 60 + minutes;
-                                timePassed = currentTime > taskTime;
-                              } else if (item.type === TASK_TYPES.TIME_RANGE && item.endTime) {
-                                const [hours, minutes] = item.endTime.split(':').map(Number);
-                                const taskEndTime = hours * 60 + minutes;
-                                timePassed = currentTime > taskEndTime;
-                              } else if (item.type && (item.type === 'office' || item.type === 'study') && item.endTime) {
-                                const [hours, minutes] = item.endTime.split(':').map(Number);
-                                const activityEndTime = hours * 60 + minutes;
-                                timePassed = currentTime > activityEndTime;
-                              }
-                              
-                              return (
+                          {todaysSchedule.allItems.map((item, index) => {
+                            // Check if time has passed - using start time for all tasks
+                            const now = new Date();
+                            const currentTime = now.getHours() * 60 + now.getMinutes();
+                            let timePassed = false;
+                            
+                            if (item.type === TASK_TYPES.TIME_BOUND && item.time) {
+                              const [hours, minutes] = item.time.split(':').map(Number);
+                              const taskTime = hours * 60 + minutes;
+                              timePassed = currentTime > taskTime;
+                            } else if (item.type === TASK_TYPES.TIME_RANGE && item.startTime) {
+                              const [hours, minutes] = item.startTime.split(':').map(Number);
+                              const taskStartTime = hours * 60 + minutes;
+                              timePassed = currentTime > taskStartTime;
+                            } else if (item.type && (item.type === 'office' || item.type === 'study') && item.startTime) {
+                              const [hours, minutes] = item.startTime.split(':').map(Number);
+                              const activityStartTime = hours * 60 + minutes;
+                              timePassed = currentTime > activityStartTime;
+                            }
+                            
+                            return (
                               <div 
                                 key={item.id || `activity-${item.type}-${index}`} 
-                                className={`today-task-row ${timePassed || item.completed ? 'time-passed' : ''}`}
+                                className={`today-task-row ${timePassed || item.completed ? 'time-passed' : ''} ${item.completed ? 'completed' : ''}`}
                                 onClick={() => item.id ? handleEditTask(item) : null}
                                 style={{ cursor: item.id ? 'pointer' : 'default' }}
                               >
@@ -1842,6 +1885,9 @@ function App() {
                                 <div className="today-task-center">
                                   <i className={`fas fa-${item.icon || 'tasks'}`}></i>
                                   <span>{item.title}</span>
+                                  {item.completed && (
+                                    <i className="completed-icon fas fa-check-circle"></i>
+                                  )}
                                 </div>
                                 <div className="today-task-right">
                                   {(item.parentTaskId || item.isRecurring) && (
@@ -1851,172 +1897,30 @@ function App() {
                                   )}
                                 </div>
                               </div>
-                            );})}
-                          </div>
-                        </section>
-                      );
-                    }
-                    return null;
-                  })()}
-                </>
-              ) : categorizedTasks.upcoming.length > 0 ? (
-                <>
-                  <section className="task-section">
-                    <div className="section-header">
-                      <h2>
-                        <i className="fas fa-clock"></i>
-                        Next Up
-                      </h2>
-                    </div>
-                    <div className="task-list">
-                      <TaskCard
-                        key={categorizedTasks.upcoming[0].id}
-                        task={categorizedTasks.upcoming[0]}
-                        onComplete={handleCompleteTask}
-                        onDelete={handleDeleteTask}
-                        onEdit={handleEditTask}
-                        onToggleLock={handleToggleLock}
-                        allTasks={tasks}
-                      />
-                    </div>
-                  </section>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    )}
 
-                  {/* Today's Tasks Table - Shows when no running task */}
-                  {(() => {
-                    const today = new Date().toISOString().split('T')[0];
-                    const todaysTasks = [...categorizedTasks.upcoming, ...categorizedTasks.old, ...categorizedTasks.completed]
-                      .filter(t => t.date === today);
-                    
-                    // Get all activities for today
-                    const todaysActivities = [];
-                    
-                    // Add office if scheduled today
-                    if (preferences.officeStartTime && preferences.officeEndTime) {
-                      const currentDay = new Date().getDay();
-                      const officeDays = preferences.officeDays || [];
-                      if (officeDays.includes(currentDay)) {
-                        todaysActivities.push({
-                          type: 'office',
-                          title: 'Office Hours',
-                          startTime: preferences.officeStartTime,
-                          endTime: preferences.officeEndTime,
-                          icon: 'briefcase',
-                          isRecurring: officeDays.length > 1
-                        });
-                      }
-                    }
-                    
-                    // Add study slots if scheduled today
-                    if (preferences.studySlots && preferences.studySlots.length > 0) {
-                      const currentDay = new Date().getDay();
-                      preferences.studySlots.forEach(slot => {
-                        const slotDays = slot.days || [];
-                        if (slotDays.includes(currentDay)) {
-                          todaysActivities.push({
-                            type: 'study',
-                            title: 'Study Time',
-                            startTime: slot.start,
-                            endTime: slot.end,
-                            icon: 'book',
-                            isRecurring: slotDays.length > 1
-                          });
-                        }
-                      });
-                    }
-                    
-                    const allTodaysItems = [...todaysTasks, ...todaysActivities];
-                    
-                    if (allTodaysItems.length > 1) { // More than just the "Next Up" task
-                      // Sort by time
-                      const sortedItems = allTodaysItems.sort((a, b) => {
-                        const timeA = a.startTime || a.time || '99:99';
-                        const timeB = b.startTime || b.time || '99:99';
-                        return timeA.localeCompare(timeB);
-                      });
-                      
-                      return (
-                        <section className="task-section today-tasks-section">
-                          <div className="section-header">
-                            <h2>
-                              <i className="fas fa-calendar-day"></i>
-                              Today's Schedule
-                            </h2>
-                            <span className="task-count">{sortedItems.length}</span>
-                          </div>
-                          <div className="today-tasks-table">
-                            <div className="today-table-header">
-                              <div className="header-time">Time</div>
-                              <div className="header-task">Task</div>
-                              <div className="header-status">Status</div>
-                            </div>
-                            {sortedItems.map((item, index) => {
-                              // Check if time has passed
-                              const now = new Date();
-                              const currentTime = now.getHours() * 60 + now.getMinutes();
-                              let timePassed = false;
-                              
-                              if (item.type === TASK_TYPES.TIME_BOUND && item.time) {
-                                const [hours, minutes] = item.time.split(':').map(Number);
-                                const taskTime = hours * 60 + minutes;
-                                timePassed = currentTime > taskTime;
-                              } else if (item.type === TASK_TYPES.TIME_RANGE && item.endTime) {
-                                const [hours, minutes] = item.endTime.split(':').map(Number);
-                                const taskEndTime = hours * 60 + minutes;
-                                timePassed = currentTime > taskEndTime;
-                              } else if (item.type && (item.type === 'office' || item.type === 'study') && item.endTime) {
-                                const [hours, minutes] = item.endTime.split(':').map(Number);
-                                const activityEndTime = hours * 60 + minutes;
-                                timePassed = currentTime > activityEndTime;
-                              }
-                              
-                              return (
-                              <div 
-                                key={item.id || `activity-${item.type}-${index}`} 
-                                className={`today-task-row ${timePassed || item.completed ? 'time-passed' : ''}`}
-                              >
-                                <div className="today-task-time">
-                                  {item.type === TASK_TYPES.FLOATING ? (
-                                    <span className="time-flexible">Anytime</span>
-                                  ) : item.type === TASK_TYPES.TIME_BOUND ? (
-                                    formatTime(item.time)
-                                  ) : (
-                                    `${formatTime(item.startTime)} - ${formatTime(item.endTime)}`
-                                  )}
-                                </div>
-                                <div className="today-task-center">
-                                  <i className={`fas fa-${item.icon || 'tasks'}`}></i>
-                                  <span>{item.title}</span>
-                                </div>
-                                <div className="today-task-right">
-                                  {(item.parentTaskId || item.isRecurring) && (
-                                    <span className="meta-badge">
-                                      <i className="fas fa-sync-alt"></i> Recurring
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );})}
-                          </div>
-                        </section>
-                      );
-                    }
-                    return null;
-                  })()}
-                </>
-              ) : (
-                <div className="empty-state">
-                  <i className="fas fa-check-circle"></i>
-                  <h3>All caught up!</h3>
-                  <p>No tasks running or upcoming right now</p>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setCurrentView('tasks')}
-                    style={{ marginTop: '20px' }}
-                  >
-                    <i className="fas fa-plus"></i> Add a task
-                  </button>
-                </div>
-              )}
+                    {/* Show empty state only if no running items, no upcoming, and no today's schedule */}
+                    {!hasRunningItems && categorizedTasks.upcoming.length === 0 && todaysSchedule.allItems.length === 0 && (
+                      <div className="empty-state">
+                        <i className="fas fa-check-circle"></i>
+                        <h3>All caught up!</h3>
+                        <p>No tasks or activities scheduled for today</p>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => setCurrentView('tasks')}
+                          style={{ marginTop: '20px' }}
+                        >
+                          <i className="fas fa-plus"></i> Add a task
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </>
           )}
 
