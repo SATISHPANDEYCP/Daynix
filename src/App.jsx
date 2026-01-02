@@ -2217,6 +2217,9 @@ function App() {
                       <h2>
                         <i className="fas fa-calendar-alt"></i>
                         Your Saved Preferences
+                        <span className="task-count">
+                          {(preferences.officeStartTime && preferences.officeEndTime ? 1 : 0) + (preferences.studySlots?.length || 0)}
+                        </span>
                       </h2>
                     </div>
 
