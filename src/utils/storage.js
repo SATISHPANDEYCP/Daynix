@@ -85,33 +85,65 @@ export const updatePreference = async (key, value) => {
   await savePreferences(prefs);
 };
 
+// File Handle Management (IndexedDB for persisting file handles)
+const HANDLE_DB_NAME = 'Daynix-FileHandles';
+const HANDLE_STORE_NAME = 'handles';
+
+const openHandleDB = () => {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HANDLE_DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(HANDLE_STORE_NAME)) {
+        db.createObjectStore(HANDLE_STORE_NAME);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+};
+
+export const saveFileHandle = async (key, handle) => {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE_NAME, 'readwrite');
+    tx.objectStore(HANDLE_STORE_NAME).put(handle, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+export const getSavedFileHandle = async (key) => {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE_NAME, 'readonly');
+    const req = tx.objectStore(HANDLE_STORE_NAME).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+};
+
+export const deleteSavedFileHandle = async (key) => {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE_NAME, 'readwrite');
+    tx.objectStore(HANDLE_STORE_NAME).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
 // Settings Management (for backup preferences, etc.)
 export const getSettings = async () => {
   const settings = await settingsStore.getItem('appSettings');
   return settings || {
     backupLocation: null,
-    backupHandle: null,
     lastBackup: null
   };
 };
 
 export const saveSettings = async (settings) => {
-  // Store the directory handle separately using IndexedDB's native support
-  const { backupHandle, ...otherSettings } = settings;
-  await settingsStore.setItem('appSettings', otherSettings);
-  
-  // Store handle separately if it exists
-  if (backupHandle) {
-    await settingsStore.setItem('backupHandle', backupHandle);
-  }
-};
-
-export const getBackupHandle = async () => {
-  return await settingsStore.getItem('backupHandle');
-};
-
-export const clearBackupHandle = async () => {
-  await settingsStore.removeItem('backupHandle');
+  await settingsStore.setItem('appSettings', settings);
 };
 
 // Export/Import functionality

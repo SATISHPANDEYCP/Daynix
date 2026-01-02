@@ -1056,105 +1056,205 @@ const PreferencesModal = ({ isOpen, onClose, onUpdate }) => {
 const SettingsModal = ({ isOpen, onClose }) => {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [backupLocation, setBackupLocation] = useState(null);
+  const [savedBackupAvailable, setSavedBackupAvailable] = useState(false);
+
+  const BACKUP_HANDLE_KEY = 'daynix-backup-handle';
 
   useEffect(() => {
     if (isOpen) {
       loadSettings();
+      checkSavedBackup();
     }
   }, [isOpen]);
 
   const loadSettings = async () => {
-    const { getSettings, getBackupHandle } = await import('./utils/storage');
+    const { getSettings } = await import('./utils/storage');
     const appSettings = await getSettings();
-    const handle = await getBackupHandle();
-    setSettings({ ...appSettings, backupHandle: handle });
-    setBackupLocation(appSettings.backupLocation || null);
+    setSettings(appSettings);
   };
 
-  const handleAddBackupLocation = async () => {
+  const checkSavedBackup = async () => {
     try {
-      // Request directory picker (only works in modern browsers)
-      if ('showDirectoryPicker' in window) {
-        const dirHandle = await window.showDirectoryPicker();
-        const newSettings = {
-          ...settings,
-          backupLocation: dirHandle.name,
-          backupHandle: dirHandle
-        };
-        setSettings(newSettings);
-        await saveSettings(newSettings); // Now saves handle properly
-        setBackupLocation(dirHandle.name);
-        toast.success('Backup location set: ' + dirHandle.name);
-      } else {
-        toast.info('Directory picker not supported. Use Download Backup instead.');
-      }
-    } catch (error) {
-      if (error.name !== 'AbortError') {
-        toast.error('Could not set backup location');
-      }
+      const { getSavedFileHandle } = await import('./utils/storage');
+      const handle = await getSavedFileHandle(BACKUP_HANDLE_KEY);
+      setSavedBackupAvailable(Boolean(handle));
+    } catch (e) {
+      setSavedBackupAvailable(false);
     }
   };
 
-  const handleDownloadBackup = async () => {
+  const handleBackupDownload = async () => {
     try {
-      await exportData();
-      toast.success('Backup downloaded successfully');
+      const { getTasks, getPreferences, getSettings, saveFileHandle, getSavedFileHandle, saveSettings } = await import('./utils/storage');
+      const tasks = await getTasks();
+      const preferences = await getPreferences();
+      const settings = await getSettings();
+
+      const data = {
+        tasks,
+        preferences,
+        settings,
+        exportDate: new Date().toISOString(),
+        version: '1.0'
+      };
+
+      const json = JSON.stringify(data, null, 2);
+
+      const fallbackDownload = () => {
+        try {
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const now = new Date();
+          const y = now.getFullYear();
+          const m = String(now.getMonth() + 1).padStart(2, '0');
+          const d = String(now.getDate()).padStart(2, '0');
+          const hh = String(now.getHours()).padStart(2, '0');
+          const mm = String(now.getMinutes()).padStart(2, '0');
+          const ss = String(now.getSeconds()).padStart(2, '0');
+          const fileName = `daynix-backup_${y}-${m}-${d}_${hh}_${mm}_${ss}.json`;
+
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+
+          toast.success('Backup downloaded to your device!');
+        } catch (err) {
+          console.error('Fallback download failed:', err);
+          toast.error('Backup failed! Check permissions and try again.');
+        }
+      };
+
+      if ('showSaveFilePicker' in window) {
+        // Try to use saved file handle
+        let fileHandle = null;
+        try {
+          fileHandle = await getSavedFileHandle(BACKUP_HANDLE_KEY);
+        } catch (err) {
+          console.warn('Could not read saved handle:', err);
+          fileHandle = null;
+        }
+
+        if (fileHandle) {
+          try {
+            // Check permissions
+            if (fileHandle.queryPermission) {
+              const qp = await fileHandle.queryPermission({ mode: 'readwrite' });
+              if (qp === 'prompt') {
+                const rp = await fileHandle.requestPermission({ mode: 'readwrite' });
+                if (rp !== 'granted') throw new Error('Permission denied');
+              } else if (qp !== 'granted') {
+                const rp = await fileHandle.requestPermission({ mode: 'readwrite' });
+                if (rp !== 'granted') throw new Error('Permission denied');
+              }
+            }
+
+            // Write to saved file
+            const writable = await fileHandle.createWritable();
+            await writable.write(json);
+            await writable.close();
+
+            // Re-save handle
+            try {
+              await saveFileHandle(BACKUP_HANDLE_KEY, fileHandle);
+              setSavedBackupAvailable(true);
+            } catch (e) {
+              console.warn('Could not re-save handle:', e);
+            }
+
+            // Update last backup time
+            const newSettings = { ...settings, lastBackup: new Date().toISOString() };
+            await saveSettings(newSettings);
+            setSettings(newSettings);
+
+            toast.success('Backup saved and updated!');
+            return;
+          } catch (err) {
+            console.warn('Writing to saved handle failed:', err);
+          }
+        }
+
+        // If no saved handle or write failed, prompt user
+        try {
+          const now = new Date();
+          const y = now.getFullYear();
+          const m = String(now.getMonth() + 1).padStart(2, '0');
+          const d = String(now.getDate()).padStart(2, '0');
+          const hh = String(now.getHours()).padStart(2, '0');
+          const mm = String(now.getMinutes()).padStart(2, '0');
+          const ss = String(now.getSeconds()).padStart(2, '0');
+          const suggested = `daynix-backup_${y}-${m}-${d}_${hh}-${mm}-${ss}.json`;
+
+          const newHandle = await window.showSaveFilePicker({
+            suggestedName: suggested,
+            types: [
+              {
+                description: 'JSON backup',
+                accept: { 'application/json': ['.json'] }
+              }
+            ]
+          });
+
+          // Save handle for future use
+          try {
+            await saveFileHandle(BACKUP_HANDLE_KEY, newHandle);
+            setSavedBackupAvailable(true);
+          } catch (e) {
+            console.warn('Failed to persist file handle:', e);
+          }
+
+          // Check permissions
+          if (newHandle.queryPermission) {
+            const qp = await newHandle.queryPermission({ mode: 'readwrite' });
+            if (qp === 'prompt') {
+              const rp = await newHandle.requestPermission({ mode: 'readwrite' });
+              if (rp !== 'granted') throw new Error('Permission denied');
+            } else if (qp !== 'granted') {
+              const rp = await newHandle.requestPermission({ mode: 'readwrite' });
+              if (rp !== 'granted') throw new Error('Permission denied');
+            }
+          }
+
+          // Write to file
+          const writable = await newHandle.createWritable();
+          await writable.write(json);
+          await writable.close();
+
+          // Update last backup time
+          const newSettings = { ...settings, lastBackup: new Date().toISOString() };
+          await saveSettings(newSettings);
+          setSettings(newSettings);
+
+          toast.success('Backup saved! Location set for quick updates.');
+          return;
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.warn('Save picker error:', err);
+          }
+        }
+      }
+
+      // Fallback for unsupported browsers
+      fallbackDownload();
     } catch (error) {
-      toast.error('Could not download backup');
+      console.error('Backup error:', error);
+      toast.error('Could not create backup');
     }
   };
 
   const handleForgetLocation = async () => {
-    if (window.confirm('Forget backup location preference?')) {
-      const { clearBackupHandle } = await import('./utils/storage');
-      const newSettings = { ...settings, backupLocation: null, backupHandle: null };
-      setSettings(newSettings);
-      await saveSettings(newSettings);
-      await clearBackupHandle();
-      setBackupLocation(null);
-      toast.info('Backup location forgotten');
-    }
-  };
-
-  const handleUpdateBackup = async () => {
-    try {
-      if ('showDirectoryPicker' in window) {
-        let dirHandle = settings.backupHandle;
-
-        // If handle is lost, request permission again
-        if (!dirHandle && settings.backupLocation) {
-          toast.info('Please select the backup folder again');
-          dirHandle = await window.showDirectoryPicker();
-          setSettings({ ...settings, backupHandle: dirHandle });
-        }
-
-        if (dirHandle) {
-          // Save to the stored location
-          const data = await exportData(true); // Get data without downloading
-          const fileHandle = await dirHandle.getFileHandle(
-            `daynix-backup-${new Date().toISOString().split('T')[0]}.json`,
-            { create: true }
-          );
-          const stream = await fileHandle.createWritable();
-          await stream.write(data);
-          await stream.close();
-
-          const newSettings = { ...settings, lastBackup: new Date().toISOString() };
-          await saveSettings(newSettings);
-          setSettings({ ...newSettings, backupHandle: dirHandle });
-          toast.success('Backup updated successfully');
-        } else {
-          // Fallback to download
-          await handleDownloadBackup();
-        }
-      } else {
-        // Fallback to download
-        await handleDownloadBackup();
-      }
-    } catch (error) {
-      if (error.name !== 'AbortError') {
-        toast.error('Could not update backup');
+    if (window.confirm('Forget saved backup location?')) {
+      try {
+        const { deleteSavedFileHandle } = await import('./utils/storage');
+        await deleteSavedFileHandle(BACKUP_HANDLE_KEY);
+        setSavedBackupAvailable(false);
+        toast.success('Location forgotten! You\'ll choose again next time.');
+      } catch (err) {
+        console.warn(err);
+        toast.error('Failed to forget location!');
       }
     }
   };
@@ -1203,56 +1303,26 @@ const SettingsModal = ({ isOpen, onClose }) => {
           <div className="setting-section">
             <h3>Backup & Restore</h3>
 
-            {!backupLocation ? (
-              <div className="setting-item">
-                <button className="btn btn-primary btn-standard" onClick={handleAddBackupLocation}>
-                  <i className="fas fa-folder-plus"></i> Add Backup Location
-                </button>
-                <p className="setting-description">
-                  Set a folder where backups will be saved
-                </p>
-              </div>
-            ) : (
-              <div className="setting-item">
-                <div className="backup-location-display">
-                  <i className="fas fa-folder-open"></i>
-                  <span>{backupLocation}</span>
-                </div>
-                <p className="setting-description">
-                  Backup location is set
-                </p>
-              </div>
-            )}
-
             <div className="setting-item">
-              <button className="btn btn-primary btn-standard" onClick={handleDownloadBackup}>
-                <i className="fas fa-download"></i> Download Backup
+              <button className="btn btn-primary btn-standard" onClick={handleBackupDownload}>
+                <i className="fas fa-download"></i> {savedBackupAvailable ? 'Update Backup' : 'Save Backup'}
               </button>
               <p className="setting-description">
-                Download backup file as JSON to your device
+                {savedBackupAvailable 
+                  ? 'Update your backup file in the saved location'
+                  : 'Save backup file to your device (location will be remembered)'}
               </p>
             </div>
 
-            {backupLocation && (
-              <>
-                <div className="setting-item">
-                  <button className="btn btn-secondary btn-standard" onClick={handleUpdateBackup}>
-                    <i className="fas fa-sync"></i> Update Backup
-                  </button>
-                  <p className="setting-description">
-                    Update the backup file in saved location
-                  </p>
-                </div>
-
-                <div className="setting-item">
-                  <button className="btn btn-secondary btn-standard" onClick={handleForgetLocation}>
-                    <i className="fas fa-times-circle"></i> Forget Backup Location
-                  </button>
-                  <p className="setting-description">
-                    Remove saved backup location preference
-                  </p>
-                </div>
-              </>
+            {savedBackupAvailable && (
+              <div className="setting-item">
+                <button className="btn btn-secondary btn-standard" onClick={handleForgetLocation}>
+                  <i className="fas fa-times-circle"></i> Forget Backup Location
+                </button>
+                <p className="setting-description">
+                  Remove saved backup location preference
+                </p>
+              </div>
             )}
 
             <div className="setting-item">
