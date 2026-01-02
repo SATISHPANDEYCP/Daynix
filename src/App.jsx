@@ -2283,7 +2283,7 @@ function App() {
       />
 
       <ToastContainer
-        position="bottom-right"
+        position="top-right"
         autoClose={3000}
         hideProgressBar={false}
         newestOnTop
@@ -2292,6 +2292,7 @@ function App() {
         pauseOnFocusLoss={false}
         draggable
         pauseOnHover
+        closeButton={true}
         theme={theme === 'dark' ? 'dark' : 'light'}
       />
     </div>
